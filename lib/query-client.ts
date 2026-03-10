@@ -64,7 +64,10 @@ export async function uploadScanImage(imageUri: string): Promise<{
     } as any);
   }
 
-  const res = await fetch(url.toString(), {
+  // Use globalThis.fetch (not expo/fetch) — expo/fetch's FormData
+  // implementation does not support the { uri, type, name } file pattern
+  // required for native multipart uploads on iOS/Android.
+  const res = await globalThis.fetch(url.toString(), {
     method: "POST",
     body: formData as any,
     credentials: "include",
