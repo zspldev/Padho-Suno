@@ -1,10 +1,7 @@
 import { fetch } from "expo/fetch";
+import { Platform } from "react-native";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-/**
- * Gets the base URL for the Express API server (e.g., "http://localhost:3000")
- * @returns {string} The API base URL
- */
 export function getApiUrl(): string {
   let host = process.env.EXPO_PUBLIC_DOMAIN;
 
@@ -27,7 +24,7 @@ async function throwIfResNotOk(res: Response) {
 export async function apiRequest(
   method: string,
   route: string,
-  data?: unknown | undefined,
+  data?: unknown | undefined
 ): Promise<Response> {
   const baseUrl = getApiUrl();
   const url = new URL(route, baseUrl);
@@ -41,6 +38,48 @@ export async function apiRequest(
 
   await throwIfResNotOk(res);
   return res;
+}
+
+export async function uploadScanImage(imageUri: string): Promise<{
+  id: number;
+  extractedText: string;
+  detectedLanguage: string;
+  languageLabel: string;
+  demoMode: boolean;
+}> {
+  const baseUrl = getApiUrl();
+  const url = new URL("/api/scan", baseUrl);
+
+  const formData = new FormData();
+
+  if (Platform.OS === "web") {
+    const response = await globalThis.fetch(imageUri);
+    const blob = await response.blob();
+    formData.append("image", blob, "scan.jpg");
+  } else {
+    formData.append("image", {
+      uri: imageUri,
+      type: "image/jpeg",
+      name: "scan.jpg",
+    } as any);
+  }
+
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    body: formData as any,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    let message = "Scan failed";
+    try {
+      const data = await res.json() as any;
+      message = data.message || message;
+    } catch {}
+    throw new Error(message);
+  }
+
+  return res.json() as any;
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

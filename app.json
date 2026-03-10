@@ -1,26 +1,26 @@
 {
   "expo": {
-    "name": "My App",
-    "slug": "my-app",
+    "name": "PadhoSuno",
+    "slug": "padho-suno",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
+    "scheme": "padhosuno",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.myapp"
+      "bundleIdentifier": "com.padhosuno"
     },
     "android": {
-      "package": "com.myapp",
+      "package": "com.padhosuno",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FF9933",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
