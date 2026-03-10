@@ -1,7 +1,16 @@
 import type { Express } from "express";
 import { createServer, type Server } from "node:http";
+import { randomUUID } from "node:crypto";
 import multer from "multer";
 import { createScan, getAllScans, getScanById, deleteScan } from "./storage";
+
+const ttsAudioCache = new Map<string, Buffer>();
+function cacheTtsAudio(buffer: Buffer): string {
+  const id = randomUUID();
+  ttsAudioCache.set(id, buffer);
+  setTimeout(() => ttsAudioCache.delete(id), 15 * 60 * 1000);
+  return id;
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -183,11 +192,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const ttsData = await ttsRes.json() as any;
-      res.json({ ttsAudioBase64: ttsData.audioContent, demoMode: false });
+      const audioBase64: string = ttsData.audioContent;
+      const audioBuffer = Buffer.from(audioBase64, "base64");
+      const audioId = cacheTtsAudio(audioBuffer);
+      res.json({
+        ttsAudioBase64: audioBase64,
+        audioUrl: `/api/tts-audio/${audioId}`,
+        demoMode: false,
+      });
     } catch (err: any) {
       console.error("TTS error:", err);
       res.status(500).json({ message: err.message || "TTS failed" });
     }
+  });
+
+  app.get("/api/tts-audio/:id", (req, res) => {
+    const buffer = ttsAudioCache.get(req.params.id);
+    if (!buffer) {
+      return res.status(404).json({ message: "Audio not found or expired" });
+    }
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Cache-Control", "private, max-age=900");
+    res.send(buffer);
   });
 
   app.get("/api/scans", (_req, res) => {

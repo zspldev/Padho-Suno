@@ -102,13 +102,14 @@ export default function HistoryScreen() {
         });
         const data = (await res.json()) as {
           ttsAudioBase64: string | null;
+          audioUrl?: string;
           demoMode: boolean;
         };
 
         setTtsLoadingId(null);
 
-        if (data.ttsAudioBase64) {
-          await playBase64Audio(data.ttsAudioBase64, 1);
+        if (data.ttsAudioBase64 && data.audioUrl) {
+          await playBase64Audio(data.ttsAudioBase64, data.audioUrl, 1);
         } else {
           setDemoSpeakingId(scan.id);
           if (Platform.OS === "web") {

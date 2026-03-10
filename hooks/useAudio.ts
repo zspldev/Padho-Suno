@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { Platform } from "react-native";
-import * as FileSystem from "expo-file-system";
 import { Audio } from "expo-av";
+import { getApiUrl } from "@/lib/query-client";
 
 export type AudioState = "idle" | "loading" | "playing" | "paused" | "error";
 
@@ -13,7 +13,7 @@ export function useAudio() {
 
   const soundRef = useRef<Audio.Sound | null>(null);
   const webAudioRef = useRef<HTMLAudioElement | null>(null);
-  const currentBase64Ref = useRef<string | null>(null);
+  const currentAudioRef = useRef<{ base64: string; nativeUrl: string } | null>(null);
 
   const cleanupNative = useCallback(async () => {
     if (soundRef.current) {
@@ -47,16 +47,19 @@ export function useAudio() {
     };
   }, [cleanup]);
 
-  const playBase64Audio = useCallback(
-    async (base64: string, speedValue: number = 1) => {
+  const playAudio = useCallback(
+    async (
+      audioInfo: { base64: string; nativeUrl: string },
+      speedValue: number = 1
+    ) => {
       await cleanup();
-      currentBase64Ref.current = base64;
+      currentAudioRef.current = audioInfo;
       setAudioState("loading");
 
       try {
         if (Platform.OS === "web") {
           const audio = new (window as any).Audio(
-            `data:audio/mp3;base64,${base64}`
+            `data:audio/mp3;base64,${audioInfo.base64}`
           );
           audio.playbackRate = speedValue;
           webAudioRef.current = audio;
@@ -67,12 +70,12 @@ export function useAudio() {
           await audio.play();
           setAudioState("playing");
         } else {
-          const fileUri = `${FileSystem.cacheDirectory}padho_tts.mp3`;
-          await FileSystem.writeAsStringAsync(fileUri, base64, {
-            encoding: "base64" as any,
-          });
+          const baseUrl = getApiUrl().replace(/\/$/, "");
+          const fullUrl = `${baseUrl}${audioInfo.nativeUrl}`;
 
-          const { sound } = await Audio.Sound.createAsync({ uri: fileUri });
+          await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+
+          const { sound } = await Audio.Sound.createAsync({ uri: fullUrl });
           soundRef.current = sound;
 
           await sound.setRateAsync(speedValue, true);
@@ -92,6 +95,13 @@ export function useAudio() {
       }
     },
     [cleanup]
+  );
+
+  const playBase64Audio = useCallback(
+    async (base64: string, nativeUrl: string, speedValue: number = 1) => {
+      await playAudio({ base64, nativeUrl }, speedValue);
+    },
+    [playAudio]
   );
 
   const pause = useCallback(async () => {
@@ -123,10 +133,10 @@ export function useAudio() {
   }, []);
 
   const replay = useCallback(async () => {
-    if (currentBase64Ref.current) {
-      await playBase64Audio(currentBase64Ref.current, speed);
+    if (currentAudioRef.current) {
+      await playAudio(currentAudioRef.current, speed);
     }
-  }, [playBase64Audio, speed]);
+  }, [playAudio, speed]);
 
   const setSpeed = useCallback(
     async (newSpeed: number) => {
@@ -146,7 +156,7 @@ export function useAudio() {
 
   const reset = useCallback(async () => {
     await cleanup();
-    currentBase64Ref.current = null;
+    currentAudioRef.current = null;
     setAudioState("idle");
     setSpeedVal(1);
   }, [cleanup]);
@@ -154,6 +164,7 @@ export function useAudio() {
   return {
     audioState,
     speed,
+    playAudio,
     playBase64Audio,
     pause,
     resume,

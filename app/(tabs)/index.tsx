@@ -52,7 +52,6 @@ export default function ScanScreen() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [ttsLoading, setTtsLoading] = useState(false);
-  const [currentBase64, setCurrentBase64] = useState<string | null>(null);
   const [demoSpeaking, setDemoSpeaking] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -105,7 +104,6 @@ export default function ScanScreen() {
         setScanState("loading");
         setErrorMessage("");
         setScanResult(null);
-        setCurrentBase64(null);
         reset();
 
         const imageUri = result.assets[0].uri;
@@ -159,12 +157,12 @@ export default function ScanScreen() {
       });
       const data = (await res.json()) as {
         ttsAudioBase64: string | null;
+        audioUrl?: string;
         demoMode: boolean;
       };
 
-      if (data.ttsAudioBase64) {
-        setCurrentBase64(data.ttsAudioBase64);
-        await playBase64Audio(data.ttsAudioBase64, speed);
+      if (data.ttsAudioBase64 && data.audioUrl) {
+        await playBase64Audio(data.ttsAudioBase64, data.audioUrl, speed);
       } else {
         setDemoSpeaking(true);
         if (Platform.OS === "web") {
@@ -205,20 +203,18 @@ export default function ScanScreen() {
 
   const handleReplay = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (currentBase64) {
-      await playBase64Audio(currentBase64, speed);
-    } else if (demoSpeaking) {
+    if (audioState !== "idle" || demoSpeaking) {
       setDemoSpeaking(false);
       if (Platform.OS !== "web") {
         Speech.stop();
       } else {
-        window.speechSynthesis.cancel();
+        window.speechSynthesis?.cancel();
       }
-      handleReadAloud();
+      await replay();
     } else {
-      handleReadAloud();
+      await replay();
     }
-  }, [currentBase64, playBase64Audio, speed, demoSpeaking, handleReadAloud]);
+  }, [audioState, demoSpeaking, replay]);
 
   const handleSpeedChange = useCallback(
     async (s: number) => {
@@ -239,7 +235,6 @@ export default function ScanScreen() {
     }
     setScanState("idle");
     setScanResult(null);
-    setCurrentBase64(null);
     setErrorMessage("");
   }, [reset]);
 
