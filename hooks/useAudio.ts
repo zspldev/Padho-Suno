@@ -69,7 +69,7 @@ export function useAudio() {
         } else {
           const fileUri = `${FileSystem.cacheDirectory}padho_tts.mp3`;
           await FileSystem.writeAsStringAsync(fileUri, base64, {
-            encoding: FileSystem.EncodingType.Base64,
+            encoding: "base64" as any,
           });
 
           const { sound } = await Audio.Sound.createAsync({ uri: fileUri });
