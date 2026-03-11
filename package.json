@@ -13,7 +13,8 @@
     "db:push": "drizzle-kit push",
     "start": "npx expo start",
     "lint": "npx expo lint",
-    "lint:fix": "npx expo lint --fix"
+    "lint:fix": "npx expo lint --fix",
+    "web:build": "node scripts/web-build.js"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.0",

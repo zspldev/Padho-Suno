@@ -169,37 +169,53 @@ function configureExpoAndLanding(app: express.Application) {
   );
   const landingPageTemplate = fs.readFileSync(templatePath, "utf-8");
   const appName = getAppName();
+  const webDistDir = path.resolve(process.cwd(), "dist");
+  const webIndexPath = path.join(webDistDir, "index.html");
+  const hasWebBuild = fs.existsSync(webIndexPath);
 
   log("Serving static Expo files with dynamic manifest routing");
+  if (hasWebBuild) {
+    log("Web build found — serving PWA for browser requests");
+  }
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith("/api")) {
       return next();
     }
 
-    if (req.path !== "/" && req.path !== "/manifest") {
-      return next();
-    }
-
     const platform = req.header("expo-platform");
-    if (platform && (platform === "ios" || platform === "android")) {
+
+    if (req.path === "/manifest" && platform && (platform === "ios" || platform === "android")) {
       return serveExpoManifest(platform, res);
     }
 
-    if (req.path === "/") {
-      return serveLandingPage({
-        req,
-        res,
-        landingPageTemplate,
-        appName,
-      });
+    if (req.path === "/" && platform && (platform === "ios" || platform === "android")) {
+      return serveExpoManifest(platform, res);
+    }
+
+    if (req.path === "/" && !platform) {
+      if (hasWebBuild) {
+        return res.sendFile(webIndexPath);
+      }
+      return serveLandingPage({ req, res, landingPageTemplate, appName });
     }
 
     next();
   });
 
+  if (hasWebBuild) {
+    app.use(express.static(webDistDir));
+  }
+
   app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
   app.use(express.static(path.resolve(process.cwd(), "static-build")));
+
+  if (hasWebBuild) {
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.path.startsWith("/api")) return next();
+      res.sendFile(webIndexPath);
+    });
+  }
 
   log("Expo routing: Checking expo-platform header on / and /manifest");
 }
