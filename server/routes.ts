@@ -254,9 +254,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!translateRes.ok) {
         const errData = await translateRes.json() as any;
-        return res.status(500).json({
-          message: `Translation API error: ${errData.error?.message || "Unknown error"}`,
-        });
+        const errMsg: string = errData.error?.message || "Unknown error";
+        console.error("Translation API error:", errMsg);
+        return res.json({ translatedText: text, skipped: true, apiError: errMsg });
       }
 
       const translateData = await translateRes.json() as any;
