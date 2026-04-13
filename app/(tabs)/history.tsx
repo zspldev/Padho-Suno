@@ -17,6 +17,7 @@ import * as Speech from "expo-speech";
 import Colors from "@/constants/colors";
 import { apiRequest } from "@/lib/query-client";
 import { useAudio } from "@/hooks/useAudio";
+import { useLanguage } from "@/context/LanguageContext";
 
 interface Scan {
   id: number;
@@ -67,6 +68,7 @@ export default function HistoryScreen() {
   const [demoSpeakingId, setDemoSpeakingId] = useState<number | null>(null);
 
   const { audioState, playBase64Audio, reset } = useAudio();
+  const { preferredLang } = useLanguage();
 
   const { data: scans, isLoading, error, refetch } = useQuery<Scan[]>({
     queryKey: ["/api/scans"],
@@ -96,9 +98,28 @@ export default function HistoryScreen() {
       setTtsLoadingId(scan.id);
 
       try {
+        let textToRead = scan.extractedText;
+        let langToRead = scan.detectedLanguage;
+
+        if (scan.detectedLanguage !== preferredLang) {
+          try {
+            const tRes = await apiRequest("POST", "/api/translate", {
+              text: scan.extractedText,
+              sourceLanguage: scan.detectedLanguage,
+              targetLanguage: preferredLang,
+            });
+            const tData = (await tRes.json()) as { translatedText: string; skipped: boolean };
+            if (!tData.skipped) {
+              textToRead = tData.translatedText;
+              langToRead = preferredLang;
+            }
+          } catch {
+          }
+        }
+
         const res = await apiRequest("POST", "/api/tts", {
-          text: scan.extractedText,
-          language: scan.detectedLanguage,
+          text: textToRead,
+          language: langToRead,
         });
         const data = (await res.json()) as {
           ttsAudioBase64: string | null;
@@ -113,9 +134,8 @@ export default function HistoryScreen() {
         } else {
           setDemoSpeakingId(scan.id);
           if (Platform.OS === "web") {
-            const utterance = new SpeechSynthesisUtterance(scan.extractedText);
-            utterance.lang =
-              scan.detectedLanguage === "en" ? "en-IN" : "hi-IN";
+            const utterance = new SpeechSynthesisUtterance(textToRead);
+            utterance.lang = langToRead === "en" ? "en-IN" : "hi-IN";
             utterance.rate = 0.85;
             utterance.onend = () => {
               setDemoSpeakingId(null);
@@ -123,9 +143,8 @@ export default function HistoryScreen() {
             };
             window.speechSynthesis.speak(utterance);
           } else {
-            Speech.speak(scan.extractedText, {
-              language:
-                scan.detectedLanguage === "en" ? "en-IN" : "hi-IN",
+            Speech.speak(textToRead, {
+              language: langToRead === "en" ? "en-IN" : "hi-IN",
               rate: 0.85,
               onDone: () => {
                 setDemoSpeakingId(null);
@@ -144,7 +163,7 @@ export default function HistoryScreen() {
         Alert.alert("Error", err.message || "Could not load audio");
       }
     },
-    [playingId, audioState, reset, playBase64Audio]
+    [playingId, audioState, reset, playBase64Audio, preferredLang]
   );
 
   const handleDelete = useCallback(

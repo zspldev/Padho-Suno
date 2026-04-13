@@ -217,6 +217,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.send(buffer);
   });
 
+  app.post("/api/translate", async (req, res) => {
+    try {
+      const { text, sourceLanguage, targetLanguage } = req.body as {
+        text: string;
+        sourceLanguage: string;
+        targetLanguage: string;
+      };
+
+      if (!text || !sourceLanguage || !targetLanguage) {
+        return res.status(400).json({ message: "text, sourceLanguage and targetLanguage are required" });
+      }
+
+      if (sourceLanguage === targetLanguage) {
+        return res.json({ translatedText: text, skipped: true });
+      }
+
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.json({ translatedText: text, skipped: true, demoMode: true });
+      }
+
+      const translateRes = await fetch(
+        `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            q: text,
+            source: sourceLanguage,
+            target: targetLanguage,
+            format: "text",
+          }),
+        }
+      );
+
+      if (!translateRes.ok) {
+        const errData = await translateRes.json() as any;
+        return res.status(500).json({
+          message: `Translation API error: ${errData.error?.message || "Unknown error"}`,
+        });
+      }
+
+      const translateData = await translateRes.json() as any;
+      const translatedText = translateData.data?.translations?.[0]?.translatedText || text;
+
+      res.json({ translatedText, skipped: false });
+    } catch (err: any) {
+      console.error("Translation error:", err);
+      res.status(500).json({ message: err.message || "Translation failed" });
+    }
+  });
+
   app.get("/api/scans", (_req, res) => {
     try {
       const allScans = getAllScans();

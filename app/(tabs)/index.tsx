@@ -20,6 +20,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
 import { uploadScanImage, apiRequest } from "@/lib/query-client";
 import { useAudio, SPEED_OPTIONS, type AudioState } from "@/hooks/useAudio";
+import { useLanguage, LANG_OPTIONS } from "@/context/LanguageContext";
 
 type ScanState = "idle" | "loading" | "result" | "error";
 
@@ -53,8 +54,11 @@ export default function ScanScreen() {
   const [errorMessage, setErrorMessage] = useState("");
   const [ttsLoading, setTtsLoading] = useState(false);
   const [demoSpeaking, setDemoSpeaking] = useState(false);
+  const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
+  const { preferredLang, setPreferredLang } = useLanguage();
   const { audioState, speed, playBase64Audio, pause, resume, replay, setSpeed, reset } = useAudio();
 
   const handlePressIn = () => {
@@ -112,9 +116,23 @@ export default function ScanScreen() {
         queryClient.invalidateQueries({ queryKey: ["/api/scans"] });
         setScanResult(data);
         setScanState("result");
-        await Haptics.notificationAsync(
-          Haptics.NotificationFeedbackType.Success
-        );
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        if (data.detectedLanguage !== preferredLang) {
+          setTranslating(true);
+          try {
+            const tRes = await apiRequest("POST", "/api/translate", {
+              text: data.extractedText,
+              sourceLanguage: data.detectedLanguage,
+              targetLanguage: preferredLang,
+            });
+            const tData = (await tRes.json()) as { translatedText: string; skipped: boolean };
+            if (!tData.skipped) setTranslatedText(tData.translatedText);
+          } catch {
+          } finally {
+            setTranslating(false);
+          }
+        }
       } catch (err: any) {
         setScanState("error");
         setErrorMessage(
@@ -149,11 +167,14 @@ export default function ScanScreen() {
     if (!scanResult) return;
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
+    const textToRead = translatedText || scanResult.extractedText;
+    const langToRead = translatedText ? preferredLang : scanResult.detectedLanguage;
+
     setTtsLoading(true);
     try {
       const res = await apiRequest("POST", "/api/tts", {
-        text: scanResult.extractedText,
-        language: scanResult.detectedLanguage,
+        text: textToRead,
+        language: langToRead,
       });
       const data = (await res.json()) as {
         ttsAudioBase64: string | null;
@@ -166,18 +187,14 @@ export default function ScanScreen() {
       } else {
         setDemoSpeaking(true);
         if (Platform.OS === "web") {
-          const utterance = new SpeechSynthesisUtterance(
-            scanResult.extractedText
-          );
-          utterance.lang =
-            scanResult.detectedLanguage === "en" ? "en-IN" : "hi-IN";
+          const utterance = new SpeechSynthesisUtterance(textToRead);
+          utterance.lang = langToRead === "en" ? "en-IN" : "hi-IN";
           utterance.rate = 0.85;
           utterance.onend = () => setDemoSpeaking(false);
           window.speechSynthesis.speak(utterance);
         } else {
-          Speech.speak(scanResult.extractedText, {
-            language:
-              scanResult.detectedLanguage === "en" ? "en-IN" : "hi-IN",
+          Speech.speak(textToRead, {
+            language: langToRead === "en" ? "en-IN" : "hi-IN",
             rate: 0.85,
             onDone: () => setDemoSpeaking(false),
             onError: () => setDemoSpeaking(false),
@@ -190,7 +207,7 @@ export default function ScanScreen() {
     } finally {
       setTtsLoading(false);
     }
-  }, [scanResult, playBase64Audio, speed]);
+  }, [scanResult, translatedText, preferredLang, playBase64Audio, speed]);
 
   const handlePauseResume = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -236,6 +253,8 @@ export default function ScanScreen() {
     setScanState("idle");
     setScanResult(null);
     setErrorMessage("");
+    setTranslatedText(null);
+    setTranslating(false);
   }, [reset]);
 
   const isAudioActive =
@@ -244,8 +263,33 @@ export default function ScanScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={[styles.langBar, { paddingTop: topInset + 6 }]}>
+        {LANG_OPTIONS.map((opt) => (
+          <Pressable
+            key={opt.code}
+            onPress={() => {
+              setPreferredLang(opt.code);
+              setTranslatedText(null);
+            }}
+            style={[
+              styles.langBarBtn,
+              preferredLang === opt.code && styles.langBarBtnActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.langBarBtnText,
+                preferredLang === opt.code && styles.langBarBtnTextActive,
+              ]}
+            >
+              {opt.nativeLabel}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
       {scanResult?.demoMode && (
-        <View style={[styles.demoBanner, { paddingTop: topInset + 8 }]}>
+        <View style={styles.demoBanner}>
           <Ionicons name="information-circle" size={16} color={Colors.blue} />
           <Text style={styles.demoBannerText}>
             Demo mode — add GOOGLE_CLOUD_API_KEY for real OCR
@@ -256,11 +300,7 @@ export default function ScanScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingTop: scanResult?.demoMode
-              ? topInset + 52
-              : topInset + 16,
-          },
+          { paddingTop: 16 },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -394,21 +434,41 @@ export default function ScanScreen() {
               </View>
             </View>
 
-            <View style={styles.textBox}>
+            <View style={styles.textBlock}>
+              {(translatedText || scanResult.detectedLanguage !== preferredLang) && (
+                <Text style={styles.textBlockLabel}>
+                  Original — {LANG_OPTIONS.find(o => o.code === scanResult.detectedLanguage)?.label || scanResult.languageLabel}
+                </Text>
+              )}
               <ScrollView
                 nestedScrollEnabled
                 showsVerticalScrollIndicator
                 style={styles.textScroll}
               >
-                <Text
-                  style={styles.extractedText}
-                  selectable
-                  aria-label="Extracted text"
-                >
+                <Text style={styles.extractedText} selectable aria-label="Extracted text">
                   {scanResult.extractedText}
                 </Text>
               </ScrollView>
             </View>
+
+            {(translating || translatedText) && (
+              <View style={styles.translationBlock}>
+                <View style={styles.translationHeader}>
+                  <Ionicons name="language" size={15} color={Colors.saffron} />
+                  <Text style={styles.translationLabel}>
+                    Translated to {LANG_OPTIONS.find(o => o.code === preferredLang)?.label}
+                  </Text>
+                  {translating && <ActivityIndicator size="small" color={Colors.saffron} style={{ marginLeft: 6 }} />}
+                </View>
+                {translatedText && (
+                  <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={styles.textScroll}>
+                    <Text style={styles.extractedText} selectable aria-label="Translated text">
+                      {translatedText}
+                    </Text>
+                  </ScrollView>
+                )}
+              </View>
+            )}
 
             {!isAudioActive && (
               <Pressable
@@ -549,18 +609,40 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  langBar: {
+    flexDirection: "row",
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    gap: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
+  langBarBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: "transparent",
+  },
+  langBarBtnActive: {
+    backgroundColor: Colors.saffron,
+  },
+  langBarBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textSecondary,
+  },
+  langBarBtnTextActive: {
+    color: "#fff",
+  },
   demoBanner: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     backgroundColor: "#E3F2FD",
     paddingHorizontal: 16,
-    paddingBottom: 10,
-    zIndex: 10,
+    paddingVertical: 8,
   },
   demoBannerText: {
     fontSize: 12,
@@ -783,15 +865,50 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: Colors.textSecondary,
   },
-  textBox: {
+  textBlock: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.saffronMuted,
     overflow: "hidden",
+    marginBottom: 12,
+  },
+  textBlockLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textSecondary,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 2,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  translationBlock: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.saffron,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  translationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 2,
+  },
+  translationLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.saffron,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    flex: 1,
   },
   textScroll: {
-    maxHeight: 260,
+    maxHeight: 220,
     padding: 16,
   },
   extractedText: {
