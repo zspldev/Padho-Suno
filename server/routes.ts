@@ -32,10 +32,10 @@ const LANGUAGE_LABELS: Record<string, string> = {
 };
 
 const VOICE_MAPPING: Record<string, { languageCode: string; name: string }> = {
-  hi: { languageCode: "hi-IN", name: "hi-IN-Standard-A" },
-  mr: { languageCode: "mr-IN", name: "mr-IN-Standard-A" },
-  gu: { languageCode: "gu-IN", name: "gu-IN-Standard-A" },
-  en: { languageCode: "en-IN", name: "en-IN-Standard-A" },
+  hi: { languageCode: "hi-IN", name: "hi-IN-Wavenet-D" },
+  mr: { languageCode: "mr-IN", name: "mr-IN-Wavenet-A" },
+  gu: { languageCode: "gu-IN", name: "gu-IN-Wavenet-A" },
+  en: { languageCode: "en-IN", name: "en-IN-Wavenet-D" },
 };
 
 const SUPPORTED_LANGS = ["hi", "mr", "gu", "en"];
