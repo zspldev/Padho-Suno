@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "wFsxm125JEZHu_ragzx9w"
+uri = "file://Padho-Suno.md"
+type = "text"
+title = "PadhoSuno — Full Project Documentation"
