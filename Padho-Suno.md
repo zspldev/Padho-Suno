@@ -31,10 +31,10 @@ PadhoSuno is a cross-platform mobile application (iOS, Android, and PWA) that he
 
 1. Extracts the text using Google Cloud Vision OCR
 2. Detects the language automatically (Hindi, Marathi, Gujarati, or English)
-3. Translates the text to the user's preferred language
-4. Reads it aloud using high-quality Google WaveNet voices
+3. Translates the text to the user's preferred language using **Sarvam AI** (`sarvam-translate:v1`)
+4. Reads it aloud using **Sarvam AI Bulbul v3** voices (WAV, natural Indian-language TTS)
 
-The app requires no login and works offline for history playback. A demo mode is available when no Google Cloud API key is configured.
+The app requires no login and works offline for history playback. A demo mode is available when no API keys are configured. Sarvam AI is the primary provider for TTS and Translation; Google Cloud APIs serve as fallback if only `GOOGLE_CLOUD_API_KEY` is set.
 
 ---
 

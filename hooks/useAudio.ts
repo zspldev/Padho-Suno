@@ -13,7 +13,7 @@ export function useAudio() {
 
   const soundRef = useRef<Audio.Sound | null>(null);
   const webAudioRef = useRef<HTMLAudioElement | null>(null);
-  const currentAudioRef = useRef<{ base64: string; nativeUrl: string } | null>(null);
+  const currentAudioRef = useRef<{ base64: string; nativeUrl: string; format?: string } | null>(null);
 
   const cleanupNative = useCallback(async () => {
     if (soundRef.current) {
@@ -49,7 +49,7 @@ export function useAudio() {
 
   const playAudio = useCallback(
     async (
-      audioInfo: { base64: string; nativeUrl: string },
+      audioInfo: { base64: string; nativeUrl: string; format?: string },
       speedValue: number = 1
     ) => {
       await cleanup();
@@ -58,8 +58,9 @@ export function useAudio() {
 
       try {
         if (Platform.OS === "web") {
+          const mimeType = audioInfo.format === "wav" ? "audio/wav" : "audio/mp3";
           const audio = new (window as any).Audio(
-            `data:audio/mp3;base64,${audioInfo.base64}`
+            `data:${mimeType};base64,${audioInfo.base64}`
           );
           audio.playbackRate = speedValue;
           webAudioRef.current = audio;
@@ -98,8 +99,8 @@ export function useAudio() {
   );
 
   const playBase64Audio = useCallback(
-    async (base64: string, nativeUrl: string, speedValue: number = 1) => {
-      await playAudio({ base64, nativeUrl }, speedValue);
+    async (base64: string, nativeUrl: string, speedValue: number = 1, audioFormat?: string) => {
+      await playAudio({ base64, nativeUrl, format: audioFormat }, speedValue);
     },
     [playAudio]
   );

@@ -4,13 +4,28 @@ import { randomUUID } from "node:crypto";
 import multer from "multer";
 import { createScan, getAllScans, getScanById, deleteScan } from "./storage";
 
-const ttsAudioCache = new Map<string, Buffer>();
-function cacheTtsAudio(buffer: Buffer): string {
+const ttsAudioCache = new Map<string, { buffer: Buffer; contentType: string }>();
+function cacheTtsAudio(buffer: Buffer, contentType: string): string {
   const id = randomUUID();
-  ttsAudioCache.set(id, buffer);
+  ttsAudioCache.set(id, { buffer, contentType });
   setTimeout(() => ttsAudioCache.delete(id), 15 * 60 * 1000);
   return id;
 }
+
+// Sarvam AI — language codes (BCP-47) and speaker voices
+const SARVAM_LANG_CODE: Record<string, string> = {
+  hi: "hi-IN",
+  mr: "mr-IN",
+  gu: "gu-IN",
+  en: "en-IN",
+};
+
+const SARVAM_SPEAKER: Record<string, string> = {
+  hi: "ritu",
+  mr: "ritu",
+  gu: "ritu",
+  en: "ishita",
+};
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -160,44 +175,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "text and language are required" });
       }
 
-      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      const sarvamKey = process.env.SARVAM_API_KEY;
+      const googleKey = process.env.GOOGLE_CLOUD_API_KEY;
 
-      if (!apiKey) {
+      if (!sarvamKey && !googleKey) {
         return res.json({ ttsAudioBase64: null, demoMode: true });
       }
 
-      const voice = VOICE_MAPPING[language] || VOICE_MAPPING["hi"];
+      let audioBase64: string;
+      let contentType: string;
 
-      const ttsRes = await fetch(
-        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
-        {
+      if (sarvamKey) {
+        // ── Sarvam Bulbul v3 ──
+        const langCode = SARVAM_LANG_CODE[language] || "hi-IN";
+        const speaker = SARVAM_SPEAKER[language] || "ritu";
+
+        const sarvamRes = await fetch("https://api.sarvam.ai/text-to-speech", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "api-subscription-key": sarvamKey,
+          },
           body: JSON.stringify({
-            input: { text },
-            voice: {
-              languageCode: voice.languageCode,
-              name: voice.name,
-            },
-            audioConfig: { audioEncoding: "MP3" },
+            text,
+            target_language_code: langCode,
+            speaker,
+            model: "bulbul:v3",
+            pace: 1.0,
           }),
-        }
-      );
-
-      if (!ttsRes.ok) {
-        const errData = await ttsRes.json() as any;
-        return res.status(500).json({
-          message: `TTS API error: ${errData.error?.message || "Unknown error"}`,
         });
+
+        if (!sarvamRes.ok) {
+          const errData = await sarvamRes.json() as any;
+          const errMsg = errData?.message || errData?.detail || "Unknown error";
+          console.error("Sarvam TTS error:", errMsg);
+          return res.status(500).json({ message: `Sarvam TTS error: ${errMsg}` });
+        }
+
+        const sarvamData = await sarvamRes.json() as any;
+        audioBase64 = sarvamData.audios?.[0];
+        contentType = "audio/wav";
+
+        if (!audioBase64) {
+          return res.status(500).json({ message: "Sarvam TTS returned no audio" });
+        }
+      } else {
+        // ── Google WaveNet fallback ──
+        const voice = VOICE_MAPPING[language] || VOICE_MAPPING["hi"];
+
+        const ttsRes = await fetch(
+          `https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              input: { text },
+              voice: { languageCode: voice.languageCode, name: voice.name },
+              audioConfig: { audioEncoding: "MP3" },
+            }),
+          }
+        );
+
+        if (!ttsRes.ok) {
+          const errData = await ttsRes.json() as any;
+          return res.status(500).json({
+            message: `TTS API error: ${errData.error?.message || "Unknown error"}`,
+          });
+        }
+
+        const ttsData = await ttsRes.json() as any;
+        audioBase64 = ttsData.audioContent;
+        contentType = "audio/mpeg";
       }
 
-      const ttsData = await ttsRes.json() as any;
-      const audioBase64: string = ttsData.audioContent;
       const audioBuffer = Buffer.from(audioBase64, "base64");
-      const audioId = cacheTtsAudio(audioBuffer);
+      const audioId = cacheTtsAudio(audioBuffer, contentType);
       res.json({
         ttsAudioBase64: audioBase64,
         audioUrl: `/api/tts-audio/${audioId}`,
+        audioFormat: contentType === "audio/wav" ? "wav" : "mp3",
         demoMode: false,
       });
     } catch (err: any) {
@@ -207,14 +263,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/tts-audio/:id", (req, res) => {
-    const buffer = ttsAudioCache.get(req.params.id);
-    if (!buffer) {
+    const entry = ttsAudioCache.get(req.params.id);
+    if (!entry) {
       return res.status(404).json({ message: "Audio not found or expired" });
     }
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Content-Type", entry.contentType);
+    res.setHeader("Content-Length", entry.buffer.length);
     res.setHeader("Cache-Control", "private, max-age=900");
-    res.send(buffer);
+    res.send(entry.buffer);
   });
 
   app.post("/api/translate", async (req, res) => {
@@ -233,13 +289,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ translatedText: text, skipped: true });
       }
 
-      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
-      if (!apiKey) {
+      const sarvamKey = process.env.SARVAM_API_KEY;
+      const googleKey = process.env.GOOGLE_CLOUD_API_KEY;
+
+      if (!sarvamKey && !googleKey) {
         return res.json({ translatedText: text, skipped: true, demoMode: true });
       }
 
+      if (sarvamKey) {
+        // ── Sarvam Translate v1 ──
+        const sourceLangCode = SARVAM_LANG_CODE[sourceLanguage] || `${sourceLanguage}-IN`;
+        const targetLangCode = SARVAM_LANG_CODE[targetLanguage] || `${targetLanguage}-IN`;
+
+        const sarvamRes = await fetch("https://api.sarvam.ai/translate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "api-subscription-key": sarvamKey,
+          },
+          body: JSON.stringify({
+            input: text,
+            source_language_code: sourceLangCode,
+            target_language_code: targetLangCode,
+            model: "sarvam-translate:v1",
+          }),
+        });
+
+        if (!sarvamRes.ok) {
+          const errData = await sarvamRes.json() as any;
+          const errMsg = errData?.message || errData?.detail || "Unknown error";
+          console.error("Sarvam Translation error:", errMsg);
+          return res.json({ translatedText: text, skipped: true, apiError: errMsg });
+        }
+
+        const sarvamData = await sarvamRes.json() as any;
+        const translatedText = sarvamData.translated_text || text;
+        return res.json({ translatedText, skipped: false });
+      }
+
+      // ── Google Translate fallback ──
       const translateRes = await fetch(
-        `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`,
+        `https://translation.googleapis.com/language/translate/v2?key=${googleKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

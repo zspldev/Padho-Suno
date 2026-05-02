@@ -179,11 +179,12 @@ export default function ScanScreen() {
       const data = (await res.json()) as {
         ttsAudioBase64: string | null;
         audioUrl?: string;
+        audioFormat?: string;
         demoMode: boolean;
       };
 
       if (data.ttsAudioBase64 && data.audioUrl) {
-        await playBase64Audio(data.ttsAudioBase64, data.audioUrl, speed);
+        await playBase64Audio(data.ttsAudioBase64, data.audioUrl, speed, data.audioFormat);
       } else {
         setDemoSpeaking(true);
         if (Platform.OS === "web") {
