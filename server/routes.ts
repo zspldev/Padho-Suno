@@ -12,19 +12,55 @@ function cacheTtsAudio(buffer: Buffer, contentType: string): string {
   return id;
 }
 
-// Sarvam AI — language codes (BCP-47) and speaker voices
+// Sarvam AI — language codes (BCP-47) and speaker voices (22 official Indian languages)
 const SARVAM_LANG_CODE: Record<string, string> = {
-  hi: "hi-IN",
-  mr: "mr-IN",
-  gu: "gu-IN",
-  en: "en-IN",
+  as:  "as-IN",
+  bn:  "bn-IN",
+  brx: "brx-IN",
+  doi: "doi-IN",
+  en:  "en-IN",
+  gu:  "gu-IN",
+  hi:  "hi-IN",
+  kn:  "kn-IN",
+  ks:  "ks-IN",
+  kok: "kok-IN",
+  mai: "mai-IN",
+  ml:  "ml-IN",
+  mni: "mni-IN",
+  mr:  "mr-IN",
+  ne:  "ne-IN",
+  or:  "or-IN",
+  pa:  "pa-IN",
+  sa:  "sa-IN",
+  sd:  "sd-IN",
+  ta:  "ta-IN",
+  te:  "te-IN",
+  ur:  "ur-IN",
 };
 
 const SARVAM_SPEAKER: Record<string, string> = {
-  hi: "ritu",
-  mr: "ritu",
-  gu: "ritu",
-  en: "ishita",
+  as:  "meera",
+  bn:  "meera",
+  brx: "meera",
+  doi: "meera",
+  en:  "ishita",
+  gu:  "ritu",
+  hi:  "ritu",
+  kn:  "meera",
+  ks:  "meera",
+  kok: "meera",
+  mai: "meera",
+  ml:  "meera",
+  mni: "meera",
+  mr:  "ritu",
+  ne:  "meera",
+  or:  "meera",
+  pa:  "meera",
+  sa:  "ritu",
+  sd:  "meera",
+  ta:  "meera",
+  te:  "meera",
+  ur:  "meera",
 };
 
 const upload = multer({

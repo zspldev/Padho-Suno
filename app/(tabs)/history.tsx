@@ -26,19 +26,6 @@ interface Scan {
   createdAt: number;
 }
 
-const LANGUAGE_LABELS: Record<string, string> = {
-  hi: "Hindi",
-  mr: "Marathi",
-  gu: "Gujarati",
-  en: "English",
-};
-
-const LANG_FLAG: Record<string, string> = {
-  hi: "🇮🇳",
-  mr: "🇮🇳",
-  gu: "🇮🇳",
-  en: "🇬🇧",
-};
 
 function formatDate(ts: number): string {
   const date = new Date(ts * 1000);
@@ -68,7 +55,7 @@ export default function HistoryScreen() {
   const [demoSpeakingId, setDemoSpeakingId] = useState<number | null>(null);
 
   const { audioState, playBase64Audio, reset } = useAudio();
-  const { preferredLang } = useLanguage();
+  const { preferredLang, getLangOption } = useLanguage();
 
   const { data: scans, isLoading, error, refetch } = useQuery<Scan[]>({
     queryKey: ["/api/scans"],
@@ -213,11 +200,8 @@ export default function HistoryScreen() {
         >
           <View style={styles.cardHeader}>
             <View style={styles.langBadge}>
-              <Text style={styles.langBadgeFlag}>
-                {LANG_FLAG[item.detectedLanguage] || "🌐"}
-              </Text>
               <Text style={styles.langBadgeText}>
-                {LANGUAGE_LABELS[item.detectedLanguage] || "Unknown"}
+                {getLangOption(item.detectedLanguage).label}
               </Text>
             </View>
             <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
@@ -426,9 +410,6 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     borderWidth: 1,
     borderColor: Colors.saffronMuted,
-  },
-  langBadgeFlag: {
-    fontSize: 14,
   },
   langBadgeText: {
     fontSize: 13,

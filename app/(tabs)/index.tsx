@@ -19,8 +19,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useQueryClient } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
 import { uploadScanImage, apiRequest } from "@/lib/query-client";
-import { useAudio, SPEED_OPTIONS, type AudioState } from "@/hooks/useAudio";
-import { useLanguage, LANG_OPTIONS } from "@/context/LanguageContext";
+import { useAudio, SPEED_OPTIONS } from "@/hooks/useAudio";
+import { useLanguage } from "@/context/LanguageContext";
+import LanguagePickerModal from "@/components/LanguagePickerModal";
 
 type ScanState = "idle" | "loading" | "result" | "error";
 
@@ -31,13 +32,6 @@ interface ScanResult {
   languageLabel: string;
   demoMode: boolean;
 }
-
-const LANG_FLAG: Record<string, string> = {
-  hi: "🇮🇳",
-  mr: "🇮🇳",
-  gu: "🇮🇳",
-  en: "🇬🇧",
-};
 
 function estimateReadingTime(text: string): string {
   const words = text.trim().split(/\s+/).length;
@@ -52,55 +46,44 @@ export default function ScanScreen() {
   const [scanState, setScanState] = useState<ScanState>("idle");
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
-  const [ttsLoading, setTtsLoading] = useState(false);
+  const [ttsLoading, setTtsLoading] = useState<string | null>(null);
   const [demoSpeaking, setDemoSpeaking] = useState(false);
   const [translatedText, setTranslatedText] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
+  const [activeReadMode, setActiveReadMode] = useState<string | null>(null);
+  const [showLangPicker, setShowLangPicker] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  const { preferredLang, setPreferredLang } = useLanguage();
+  const { preferredLang, setPreferredLang, getLangOption, hasPickedLanguage, markLanguagePicked } = useLanguage();
   const { audioState, speed, playBase64Audio, pause, resume, replay, setSpeed, reset } = useAudio();
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.93,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 0.93, useNativeDriver: true }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
   };
 
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
-  };
+  const handleLanguagePicked = useCallback((lang: string) => {
+    setPreferredLang(lang);
+    if (!hasPickedLanguage) markLanguagePicked();
+    setShowLangPicker(false);
+  }, [setPreferredLang, markLanguagePicked, hasPickedLanguage]);
 
   const openImagePicker = useCallback(
     async (useCamera: boolean) => {
       try {
         if (useCamera) {
-          const { status } =
-            await ImagePicker.requestCameraPermissionsAsync();
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
           if (status !== "granted") {
-            Alert.alert(
-              "Permission needed",
-              "Camera access is required to scan documents."
-            );
+            Alert.alert("Permission needed", "Camera access is required to scan documents.");
             return;
           }
         }
 
         const result = useCamera
-          ? await ImagePicker.launchCameraAsync({
-              mediaTypes: ["images"],
-              quality: 0.8,
-              allowsEditing: false,
-            })
-          : await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ["images"],
-              quality: 0.8,
-              allowsEditing: false,
-            });
+          ? await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: false })
+          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: false });
 
         if (result.canceled || !result.assets[0]) return;
 
@@ -108,6 +91,8 @@ export default function ScanScreen() {
         setScanState("loading");
         setErrorMessage("");
         setScanResult(null);
+        setTranslatedText(null);
+        setActiveReadMode(null);
         reset();
 
         const imageUri = result.assets[0].uri;
@@ -117,28 +102,9 @@ export default function ScanScreen() {
         setScanResult(data);
         setScanState("result");
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-        if (data.detectedLanguage !== preferredLang) {
-          setTranslating(true);
-          try {
-            const tRes = await apiRequest("POST", "/api/translate", {
-              text: data.extractedText,
-              sourceLanguage: data.detectedLanguage,
-              targetLanguage: preferredLang,
-            });
-            const tData = (await tRes.json()) as { translatedText: string; skipped: boolean };
-            if (!tData.skipped) setTranslatedText(tData.translatedText);
-          } catch {
-          } finally {
-            setTranslating(false);
-          }
-        }
       } catch (err: any) {
         setScanState("error");
-        setErrorMessage(
-          err.message?.replace(/^\d+:\s*/, "") ||
-            "Something went wrong. Please try again."
-        );
+        setErrorMessage(err.message?.replace(/^\d+:\s*/, "") || "Something went wrong. Please try again.");
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
     },
@@ -150,32 +116,19 @@ export default function ScanScreen() {
       openImagePicker(false);
     } else {
       Alert.alert("Scan Document", "Choose how to capture the document", [
-        {
-          text: "Take Photo",
-          onPress: () => openImagePicker(true),
-        },
-        {
-          text: "Choose from Gallery",
-          onPress: () => openImagePicker(false),
-        },
+        { text: "Take Photo", onPress: () => openImagePicker(true) },
+        { text: "Choose from Gallery", onPress: () => openImagePicker(false) },
         { text: "Cancel", style: "cancel" },
       ]);
     }
   }, [openImagePicker]);
 
-  const handleReadAloud = useCallback(async () => {
-    if (!scanResult) return;
+  const doTts = useCallback(async (text: string, lang: string, modeKey: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    const textToRead = translatedText || scanResult.extractedText;
-    const langToRead = translatedText ? preferredLang : scanResult.detectedLanguage;
-
-    setTtsLoading(true);
+    setTtsLoading(modeKey);
+    setActiveReadMode(modeKey);
     try {
-      const res = await apiRequest("POST", "/api/tts", {
-        text: textToRead,
-        language: langToRead,
-      });
+      const res = await apiRequest("POST", "/api/tts", { text, language: lang });
       const data = (await res.json()) as {
         ttsAudioBase64: string | null;
         audioUrl?: string;
@@ -188,14 +141,14 @@ export default function ScanScreen() {
       } else {
         setDemoSpeaking(true);
         if (Platform.OS === "web") {
-          const utterance = new SpeechSynthesisUtterance(textToRead);
-          utterance.lang = langToRead === "en" ? "en-IN" : "hi-IN";
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = lang === "en" ? "en-IN" : "hi-IN";
           utterance.rate = 0.85;
           utterance.onend = () => setDemoSpeaking(false);
           window.speechSynthesis.speak(utterance);
         } else {
-          Speech.speak(textToRead, {
-            language: langToRead === "en" ? "en-IN" : "hi-IN",
+          Speech.speak(text, {
+            language: lang === "en" ? "en-IN" : "hi-IN",
             rate: 0.85,
             onDone: () => setDemoSpeaking(false),
             onError: () => setDemoSpeaking(false),
@@ -204,53 +157,91 @@ export default function ScanScreen() {
       }
     } catch (err: any) {
       setDemoSpeaking(false);
+      setActiveReadMode(null);
       Alert.alert("Error", err.message || "Could not load audio");
     } finally {
-      setTtsLoading(false);
+      setTtsLoading(null);
     }
-  }, [scanResult, translatedText, preferredLang, playBase64Audio, speed]);
+  }, [playBase64Audio, speed]);
+
+  const translateAndRead = useCallback(async (targetLang: string, modeKey: string) => {
+    if (!scanResult) return;
+
+    if (scanResult.detectedLanguage === targetLang) {
+      await doTts(scanResult.extractedText, targetLang, modeKey);
+      return;
+    }
+
+    setTtsLoading(modeKey);
+    setActiveReadMode(modeKey);
+    try {
+      const tRes = await apiRequest("POST", "/api/translate", {
+        text: scanResult.extractedText,
+        sourceLanguage: scanResult.detectedLanguage,
+        targetLanguage: targetLang,
+      });
+      const tData = (await tRes.json()) as { translatedText: string; skipped: boolean };
+      const textToRead = tData.skipped ? scanResult.extractedText : tData.translatedText;
+      const langToRead = tData.skipped ? scanResult.detectedLanguage : targetLang;
+
+      if (modeKey === `preferred-${targetLang}`) {
+        setTranslatedText(tData.skipped ? null : tData.translatedText);
+      }
+
+      setTtsLoading(null);
+      await doTts(textToRead, langToRead, modeKey);
+    } catch (err: any) {
+      setTtsLoading(null);
+      setActiveReadMode(null);
+      Alert.alert("Error", err.message || "Could not translate");
+    }
+  }, [scanResult, doTts]);
+
+  const handleReadOriginal = useCallback(async () => {
+    if (!scanResult) return;
+    await doTts(scanResult.extractedText, scanResult.detectedLanguage, "original");
+  }, [scanResult, doTts]);
+
+  const handleReadPreferred = useCallback(async () => {
+    if (!scanResult) return;
+    await translateAndRead(preferredLang, `preferred-${preferredLang}`);
+  }, [scanResult, preferredLang, translateAndRead]);
+
+  const handleReadHindi = useCallback(async () => {
+    if (!scanResult) return;
+    await translateAndRead("hi", "hindi");
+  }, [scanResult, translateAndRead]);
 
   const handlePauseResume = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (audioState === "playing") {
-      await pause();
-    } else if (audioState === "paused") {
-      await resume();
-    }
+    if (audioState === "playing") await pause();
+    else if (audioState === "paused") await resume();
   }, [audioState, pause, resume]);
 
   const handleReplay = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (audioState !== "idle" || demoSpeaking) {
       setDemoSpeaking(false);
-      if (Platform.OS !== "web") {
-        Speech.stop();
-      } else {
-        window.speechSynthesis?.cancel();
-      }
+      if (Platform.OS !== "web") Speech.stop();
+      else window.speechSynthesis?.cancel();
       await replay();
     } else {
       await replay();
     }
   }, [audioState, demoSpeaking, replay]);
 
-  const handleSpeedChange = useCallback(
-    async (s: number) => {
-      await Haptics.selectionAsync();
-      await setSpeed(s);
-    },
-    [setSpeed]
-  );
+  const handleSpeedChange = useCallback(async (s: number) => {
+    await Haptics.selectionAsync();
+    await setSpeed(s);
+  }, [setSpeed]);
 
   const handleScanAnother = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     reset();
     setDemoSpeaking(false);
-    if (Platform.OS !== "web") {
-      Speech.stop();
-    } else if (Platform.OS === "web") {
-      window.speechSynthesis?.cancel();
-    }
+    setActiveReadMode(null);
+    if (Platform.OS !== "web") Speech.stop();
+    else window.speechSynthesis?.cancel();
     setScanState("idle");
     setScanResult(null);
     setErrorMessage("");
@@ -258,35 +249,54 @@ export default function ScanScreen() {
     setTranslating(false);
   }, [reset]);
 
-  const isAudioActive =
-    audioState === "playing" || audioState === "paused" || demoSpeaking;
+  const stopAudio = useCallback(async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDemoSpeaking(false);
+    setActiveReadMode(null);
+    if (Platform.OS !== "web") Speech.stop();
+    else window.speechSynthesis?.cancel();
+    reset();
+  }, [reset]);
+
+  const isAudioActive = audioState === "playing" || audioState === "paused" || demoSpeaking;
   const topInset = Platform.OS === "web" ? 67 : insets.top;
+
+  const preferredLangOption = getLangOption(preferredLang);
 
   return (
     <View style={styles.container}>
-      <View style={[styles.langBar, { paddingTop: topInset + 6 }]}>
-        {LANG_OPTIONS.map((opt) => (
-          <Pressable
-            key={opt.code}
-            onPress={() => {
-              setPreferredLang(opt.code);
-              setTranslatedText(null);
-            }}
-            style={[
-              styles.langBarBtn,
-              preferredLang === opt.code && styles.langBarBtnActive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.langBarBtnText,
-                preferredLang === opt.code && styles.langBarBtnTextActive,
-              ]}
-            >
-              {opt.nativeLabel}
-            </Text>
-          </Pressable>
-        ))}
+      <LanguagePickerModal
+        visible={!hasPickedLanguage || showLangPicker}
+        isFirstLaunch={!hasPickedLanguage}
+        currentLang={preferredLang}
+        onSelect={handleLanguagePicked}
+        onDismiss={() => setShowLangPicker(false)}
+      />
+
+      <View style={[styles.headerBar, { paddingTop: topInset + 8 }]}>
+        <Pressable
+          style={styles.headerIconBtn}
+          hitSlop={12}
+          aria-label="Menu"
+          testID="menu-button"
+        >
+          <Ionicons name="menu" size={26} color={Colors.text} />
+        </Pressable>
+
+        <Text style={styles.headerTitle}>PadhoSuno</Text>
+
+        <Pressable
+          style={styles.langPill}
+          onPress={() => setShowLangPicker(true)}
+          hitSlop={8}
+          testID="language-pill"
+        >
+          <Ionicons name="language-outline" size={14} color={Colors.saffron} />
+          <Text style={styles.langPillText} numberOfLines={1}>
+            {preferredLangOption.nativeLabel}
+          </Text>
+          <Ionicons name="chevron-down" size={12} color={Colors.saffron} />
+        </Pressable>
       </View>
 
       {scanResult?.demoMode && (
@@ -299,21 +309,15 @@ export default function ScanScreen() {
       )}
 
       <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: 16 },
-        ]}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="automatic"
       >
-        <View style={styles.header}>
-          <Text style={styles.appName}>PadhoSuno</Text>
-          <Text style={styles.tagline}>पढ़ो सुनो — Photo लो, सुनो</Text>
-        </View>
-
         {scanState === "idle" && (
           <View style={styles.idleContainer}>
+            <Text style={styles.tagline}>पढ़ो सुनो — Photo लो, सुनो</Text>
+
             <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
               <Pressable
                 onPress={handleScanButton}
@@ -323,53 +327,31 @@ export default function ScanScreen() {
                 testID="scan-button"
                 style={styles.scanButtonWrapper}
               >
-                <LinearGradient
-                  colors={[Colors.saffron, Colors.saffronDark]}
-                  style={styles.scanButton}
-                >
+                <LinearGradient colors={[Colors.saffron, Colors.saffronDark]} style={styles.scanButton}>
                   <Ionicons name="camera" size={52} color={Colors.white} />
                 </LinearGradient>
               </Pressable>
             </Animated.View>
+
             <Text style={styles.scanLabel}>Scan Document</Text>
             <Pressable
               onPress={() => openImagePicker(false)}
               hitSlop={16}
               style={styles.galleryLink}
             >
-              <Ionicons
-                name="images-outline"
-                size={16}
-                color={Colors.textSecondary}
-              />
+              <Ionicons name="images-outline" size={16} color={Colors.textSecondary} />
               <Text style={styles.galleryLinkText}>Upload from gallery</Text>
             </Pressable>
 
             <View style={styles.helpCards}>
               {[
-                {
-                  icon: "camera-outline" as const,
-                  title: "Capture",
-                  desc: "Point camera at any document",
-                },
-                {
-                  icon: "text-outline" as const,
-                  title: "Extract",
-                  desc: "AI reads the text for you",
-                },
-                {
-                  icon: "volume-high-outline" as const,
-                  title: "Listen",
-                  desc: "Hear the document read aloud",
-                },
+                { icon: "camera-outline" as const, title: "Capture", desc: "Point camera at any document" },
+                { icon: "text-outline" as const, title: "Extract", desc: "AI reads the text for you" },
+                { icon: "volume-high-outline" as const, title: "Listen", desc: "Hear the document read aloud" },
               ].map((item, i) => (
                 <View key={i} style={styles.helpCard}>
                   <View style={styles.helpIconCircle}>
-                    <Ionicons
-                      name={item.icon}
-                      size={22}
-                      color={Colors.saffron}
-                    />
+                    <Ionicons name={item.icon} size={22} color={Colors.saffron} />
                   </View>
                   <Text style={styles.helpCardTitle}>{item.title}</Text>
                   <Text style={styles.helpCardDesc}>{item.desc}</Text>
@@ -384,9 +366,7 @@ export default function ScanScreen() {
             <View style={styles.loadingCard}>
               <ActivityIndicator size="large" color={Colors.saffron} />
               <Text style={styles.loadingText}>Reading your document...</Text>
-              <Text style={styles.loadingSubtext}>
-                This may take a moment
-              </Text>
+              <Text style={styles.loadingSubtext}>This may take a moment</Text>
             </View>
           </View>
         )}
@@ -394,17 +374,10 @@ export default function ScanScreen() {
         {scanState === "error" && (
           <View style={styles.errorContainer} aria-live="polite">
             <View style={styles.errorCard}>
-              <Ionicons
-                name="alert-circle"
-                size={48}
-                color={Colors.error}
-              />
+              <Ionicons name="alert-circle" size={48} color={Colors.error} />
               <Text style={styles.errorTitle}>Could not read document</Text>
               <Text style={styles.errorMessage}>{errorMessage}</Text>
-              <Pressable
-                onPress={() => setScanState("idle")}
-                style={styles.retryButton}
-              >
+              <Pressable onPress={() => setScanState("idle")} style={styles.retryButton}>
                 <Ionicons name="refresh" size={18} color={Colors.white} />
                 <Text style={styles.retryButtonText}>Try Again</Text>
               </Pressable>
@@ -416,36 +389,21 @@ export default function ScanScreen() {
           <View style={styles.resultContainer} aria-live="polite">
             <View style={styles.resultMeta}>
               <View style={styles.langBadge}>
-                <Text style={styles.langBadgeFlag}>
-                  {LANG_FLAG[scanResult.detectedLanguage] || "🌐"}
-                </Text>
                 <Text style={styles.langBadgeText}>
-                  {scanResult.languageLabel}
+                  {getLangOption(scanResult.detectedLanguage).label || scanResult.languageLabel}
                 </Text>
               </View>
               <View style={styles.readTimeBadge}>
-                <Ionicons
-                  name="time-outline"
-                  size={14}
-                  color={Colors.textSecondary}
-                />
-                <Text style={styles.readTimeText}>
-                  {estimateReadingTime(scanResult.extractedText)}
-                </Text>
+                <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
+                <Text style={styles.readTimeText}>{estimateReadingTime(scanResult.extractedText)}</Text>
               </View>
             </View>
 
             <View style={styles.textBlock}>
-              {(translatedText || scanResult.detectedLanguage !== preferredLang) && (
-                <Text style={styles.textBlockLabel}>
-                  Original — {LANG_OPTIONS.find(o => o.code === scanResult.detectedLanguage)?.label || scanResult.languageLabel}
-                </Text>
-              )}
-              <ScrollView
-                nestedScrollEnabled
-                showsVerticalScrollIndicator
-                style={styles.textScroll}
-              >
+              <Text style={styles.textBlockLabel}>
+                Original — {getLangOption(scanResult.detectedLanguage).label || scanResult.languageLabel}
+              </Text>
+              <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={styles.textScroll}>
                 <Text style={styles.extractedText} selectable aria-label="Extracted text">
                   {scanResult.extractedText}
                 </Text>
@@ -457,7 +415,7 @@ export default function ScanScreen() {
                 <View style={styles.translationHeader}>
                   <Ionicons name="language" size={15} color={Colors.saffron} />
                   <Text style={styles.translationLabel}>
-                    Translated to {LANG_OPTIONS.find(o => o.code === preferredLang)?.label}
+                    Translated to {preferredLangOption.label}
                   </Text>
                   {translating && <ActivityIndicator size="small" color={Colors.saffron} style={{ marginLeft: 6 }} />}
                 </View>
@@ -471,100 +429,53 @@ export default function ScanScreen() {
               </View>
             )}
 
-            {!isAudioActive && (
-              <Pressable
-                onPress={handleReadAloud}
-                disabled={ttsLoading}
-                style={({ pressed }) => [
-                  styles.readAloudButton,
-                  pressed && { opacity: 0.85 },
-                  ttsLoading && { opacity: 0.7 },
-                ]}
-                aria-label="Read aloud"
-                testID="read-aloud-button"
-              >
-                <LinearGradient
-                  colors={[Colors.saffron, Colors.saffronDark]}
-                  style={styles.readAloudGradient}
-                >
-                  {ttsLoading ? (
-                    <ActivityIndicator size="small" color={Colors.white} />
-                  ) : (
-                    <Ionicons
-                      name="volume-high"
-                      size={26}
-                      color={Colors.white}
-                    />
-                  )}
-                  <Text style={styles.readAloudText}>
-                    {ttsLoading ? "Preparing audio..." : "Read Aloud"}
-                  </Text>
-                </LinearGradient>
-              </Pressable>
-            )}
-
-            {isAudioActive && (
+            {isAudioActive ? (
               <View style={styles.audioControls}>
+                <View style={styles.audioActiveLabel}>
+                  <Ionicons name="volume-high" size={16} color={Colors.saffron} />
+                  <Text style={styles.audioActiveLabelText}>
+                    {activeReadMode === "original"
+                      ? `Reading in ${getLangOption(scanResult.detectedLanguage).label}`
+                      : activeReadMode === "hindi"
+                      ? "Reading in Hindi"
+                      : `Reading in ${preferredLangOption.label}`}
+                  </Text>
+                  <Pressable onPress={stopAudio} style={styles.stopBtn} hitSlop={8}>
+                    <Ionicons name="stop-circle" size={22} color={Colors.error} />
+                  </Pressable>
+                </View>
+
                 <View style={styles.audioMainRow}>
                   <Pressable
                     onPress={handlePauseResume}
                     style={styles.audioControlBtn}
-                    aria-label={
-                      audioState === "playing" ? "Pause" : "Resume"
-                    }
+                    aria-label={audioState === "playing" ? "Pause" : "Resume"}
                   >
-                    <LinearGradient
-                      colors={[Colors.saffron, Colors.saffronDark]}
-                      style={styles.audioControlBtnGradient}
-                    >
+                    <LinearGradient colors={[Colors.saffron, Colors.saffronDark]} style={styles.audioControlBtnGradient}>
                       <Ionicons
-                        name={
-                          audioState === "playing" || demoSpeaking
-                            ? "pause"
-                            : "play"
-                        }
+                        name={audioState === "playing" || demoSpeaking ? "pause" : "play"}
                         size={28}
                         color={Colors.white}
                       />
                     </LinearGradient>
                   </Pressable>
-                  <Pressable
-                    onPress={handleReplay}
-                    style={styles.audioReplayBtn}
-                    aria-label="Replay from start"
-                  >
-                    <Ionicons
-                      name="refresh"
-                      size={22}
-                      color={Colors.saffron}
-                    />
+                  <Pressable onPress={handleReplay} style={styles.audioReplayBtn} aria-label="Replay from start">
+                    <Ionicons name="refresh" size={22} color={Colors.saffron} />
                     <Text style={styles.audioReplayText}>Replay</Text>
                   </Pressable>
                 </View>
 
                 {!demoSpeaking && (
                   <View style={styles.speedRow}>
-                    <Ionicons
-                      name="speedometer-outline"
-                      size={16}
-                      color={Colors.textSecondary}
-                    />
+                    <Ionicons name="speedometer-outline" size={16} color={Colors.textSecondary} />
                     {SPEED_OPTIONS.map((s) => (
                       <Pressable
                         key={s}
                         onPress={() => handleSpeedChange(s)}
-                        style={[
-                          styles.speedChip,
-                          speed === s && styles.speedChipActive,
-                        ]}
+                        style={[styles.speedChip, speed === s && styles.speedChipActive]}
                         hitSlop={8}
                       >
-                        <Text
-                          style={[
-                            styles.speedChipText,
-                            speed === s && styles.speedChipTextActive,
-                          ]}
-                        >
+                        <Text style={[styles.speedChipText, speed === s && styles.speedChipTextActive]}>
                           {s}x
                         </Text>
                       </Pressable>
@@ -572,30 +483,106 @@ export default function ScanScreen() {
                   </View>
                 )}
               </View>
+            ) : (
+              <View style={styles.listenOptionsContainer}>
+                <Text style={styles.listenOptionsLabel}>Listen to document</Text>
+
+                <Pressable
+                  onPress={handleReadOriginal}
+                  disabled={ttsLoading !== null}
+                  style={({ pressed }) => [
+                    styles.listenBtn,
+                    styles.listenBtnOriginal,
+                    pressed && { opacity: 0.85 },
+                    ttsLoading === "original" && { opacity: 0.7 },
+                  ]}
+                  aria-label="Listen in original language"
+                  testID="listen-original-button"
+                >
+                  {ttsLoading === "original" ? (
+                    <ActivityIndicator size="small" color={Colors.white} />
+                  ) : (
+                    <Ionicons name="volume-high" size={20} color={Colors.white} />
+                  )}
+                  <View style={styles.listenBtnTextBlock}>
+                    <Text style={styles.listenBtnTitle}>
+                      {ttsLoading === "original" ? "Preparing..." : "Listen"}
+                    </Text>
+                    <Text style={styles.listenBtnSub}>
+                      Original · {getLangOption(scanResult.detectedLanguage).label}
+                    </Text>
+                  </View>
+                </Pressable>
+
+                <Pressable
+                  onPress={handleReadPreferred}
+                  disabled={ttsLoading !== null}
+                  style={({ pressed }) => [
+                    styles.listenBtn,
+                    styles.listenBtnPreferred,
+                    pressed && { opacity: 0.85 },
+                    ttsLoading === `preferred-${preferredLang}` && { opacity: 0.7 },
+                  ]}
+                  aria-label={`Read in ${preferredLangOption.label}`}
+                  testID="listen-preferred-button"
+                >
+                  {ttsLoading === `preferred-${preferredLang}` ? (
+                    <ActivityIndicator size="small" color={Colors.saffron} />
+                  ) : (
+                    <Ionicons name="language" size={20} color={Colors.saffron} />
+                  )}
+                  <View style={styles.listenBtnTextBlock}>
+                    <Text style={[styles.listenBtnTitle, { color: Colors.saffron }]}>
+                      {ttsLoading === `preferred-${preferredLang}` ? "Preparing..." : `Read in ${preferredLangOption.label}`}
+                    </Text>
+                    <Text style={[styles.listenBtnSub, { color: Colors.textSecondary }]}>
+                      {preferredLangOption.nativeLabel} · Translated
+                    </Text>
+                  </View>
+                </Pressable>
+
+                {preferredLang !== "hi" && (
+                  <Pressable
+                    onPress={handleReadHindi}
+                    disabled={ttsLoading !== null}
+                    style={({ pressed }) => [
+                      styles.listenBtn,
+                      styles.listenBtnHindi,
+                      pressed && { opacity: 0.85 },
+                      ttsLoading === "hindi" && { opacity: 0.7 },
+                    ]}
+                    aria-label="Read in Hindi"
+                    testID="listen-hindi-button"
+                  >
+                    {ttsLoading === "hindi" ? (
+                      <ActivityIndicator size="small" color={Colors.green} />
+                    ) : (
+                      <Ionicons name="volume-medium" size={20} color={Colors.green} />
+                    )}
+                    <View style={styles.listenBtnTextBlock}>
+                      <Text style={[styles.listenBtnTitle, { color: Colors.green }]}>
+                        {ttsLoading === "hindi" ? "Preparing..." : "Read in Hindi"}
+                      </Text>
+                      <Text style={[styles.listenBtnSub, { color: Colors.textSecondary }]}>
+                        हिंदी · Translated
+                      </Text>
+                    </View>
+                  </Pressable>
+                )}
+              </View>
             )}
 
             <View style={styles.savedRow}>
-              <Ionicons
-                name="checkmark-circle"
-                size={16}
-                color={Colors.success}
-              />
+              <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
               <Text style={styles.savedText}>Saved to history</Text>
             </View>
 
             <Pressable
               onPress={handleScanAnother}
-              style={({ pressed }) => [
-                styles.scanAnotherButton,
-                pressed && { opacity: 0.75 },
-              ]}
+              style={({ pressed }) => [styles.scanAnotherButton, pressed && { opacity: 0.75 }]}
               aria-label="Scan another document"
             >
-              <Ionicons
-                name="camera-outline"
-                size={20}
-                color={Colors.saffron}
-              />
+              <Ionicons name="camera-outline" size={20} color={Colors.saffron} />
               <Text style={styles.scanAnotherText}>Scan Another</Text>
             </Pressable>
           </View>
@@ -610,32 +597,47 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  langBar: {
+  headerBar: {
     flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     backgroundColor: Colors.surface,
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    gap: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
   },
-  langBarBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+  headerIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
-    backgroundColor: "transparent",
+    justifyContent: "center",
   },
-  langBarBtnActive: {
-    backgroundColor: Colors.saffron,
+  headerTitle: {
+    flex: 1,
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    color: Colors.text,
+    textAlign: "center",
+    letterSpacing: -0.3,
   },
-  langBarBtnText: {
+  langPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.saffronLight,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 50,
+    borderWidth: 1,
+    borderColor: Colors.saffronMuted,
+    maxWidth: 120,
+  },
+  langPillText: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.textSecondary,
-  },
-  langBarBtnTextActive: {
-    color: "#fff",
+    color: Colors.saffron,
+    flexShrink: 1,
   },
   demoBanner: {
     flexDirection: "row",
@@ -654,28 +656,19 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
+    paddingTop: 16,
     paddingBottom: 120,
   },
-  header: {
+  idleContainer: {
     alignItems: "center",
-    marginBottom: 32,
-  },
-  appName: {
-    fontSize: 34,
-    fontFamily: "Inter_700Bold",
-    color: Colors.text,
-    letterSpacing: -0.5,
+    gap: 0,
   },
   tagline: {
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     color: Colors.saffron,
-    marginTop: 6,
+    marginBottom: 28,
     textAlign: "center",
-  },
-  idleContainer: {
-    alignItems: "center",
-    gap: 0,
   },
   scanButtonWrapper: {
     marginBottom: 16,
@@ -688,33 +681,32 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     shadowColor: Colors.saffron,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.35,
     shadowRadius: 16,
-    elevation: 12,
+    elevation: 8,
   },
   scanLabel: {
     fontSize: 20,
     fontFamily: "Inter_600SemiBold",
     color: Colors.text,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   galleryLink: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    marginBottom: 40,
+    marginBottom: 36,
   },
   galleryLinkText: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     color: Colors.textSecondary,
-    textDecorationLine: "underline",
   },
   helpCards: {
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
     width: "100%",
   },
   helpCard: {
@@ -726,6 +718,11 @@ const styles = StyleSheet.create({
     gap: 8,
     borderWidth: 1,
     borderColor: Colors.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   helpIconCircle: {
     width: 44,
@@ -745,13 +742,12 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: Colors.textSecondary,
     textAlign: "center",
-    lineHeight: 16,
   },
   loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 40,
+    paddingTop: 60,
   },
   loadingCard: {
     backgroundColor: Colors.surface,
@@ -759,20 +755,18 @@ const styles = StyleSheet.create({
     padding: 40,
     alignItems: "center",
     gap: 16,
-    width: "100%",
     borderWidth: 1,
     borderColor: Colors.border,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowRadius: 12,
     elevation: 3,
   },
   loadingText: {
     fontSize: 18,
     fontFamily: "Inter_600SemiBold",
     color: Colors.text,
-    textAlign: "center",
   },
   loadingSubtext: {
     fontSize: 14,
@@ -782,28 +776,29 @@ const styles = StyleSheet.create({
   errorContainer: {
     flex: 1,
     alignItems: "center",
-    paddingTop: 40,
+    justifyContent: "center",
+    paddingTop: 60,
   },
   errorCard: {
-    backgroundColor: Colors.errorLight,
+    backgroundColor: Colors.surface,
     borderRadius: 24,
     padding: 32,
     alignItems: "center",
-    gap: 12,
+    gap: 14,
     width: "100%",
     borderWidth: 1,
-    borderColor: "#FFCDD2",
+    borderColor: Colors.errorLight,
   },
   errorTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.error,
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    color: Colors.text,
     textAlign: "center",
   },
   errorMessage: {
     fontSize: 15,
     fontFamily: "Inter_400Regular",
-    color: Colors.error,
+    color: Colors.textSecondary,
     textAlign: "center",
     lineHeight: 22,
   },
@@ -811,11 +806,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: Colors.error,
+    backgroundColor: Colors.saffron,
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 50,
-    marginTop: 8,
+    marginTop: 4,
   },
   retryButtonText: {
     fontSize: 16,
@@ -828,38 +823,28 @@ const styles = StyleSheet.create({
   resultMeta: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   langBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     backgroundColor: Colors.saffronLight,
-    paddingVertical: 6,
+    paddingVertical: 4,
     paddingHorizontal: 12,
     borderRadius: 50,
     borderWidth: 1,
     borderColor: Colors.saffronMuted,
   },
-  langBadgeFlag: {
-    fontSize: 16,
-  },
   langBadgeText: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
     color: Colors.saffronDark,
   },
   readTimeBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: Colors.surface,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 50,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    gap: 4,
   },
   readTimeText: {
     fontSize: 13,
@@ -868,120 +853,149 @@ const styles = StyleSheet.create({
   },
   textBlock: {
     backgroundColor: Colors.surface,
-    borderRadius: 16,
+    borderRadius: 20,
+    padding: 18,
     borderWidth: 1,
-    borderColor: Colors.saffronMuted,
-    overflow: "hidden",
-    marginBottom: 12,
+    borderColor: Colors.border,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
   textBlockLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.textSecondary,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 2,
+    color: Colors.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  textScroll: {
+    maxHeight: 180,
+  },
+  extractedText: {
+    fontSize: 16,
+    fontFamily: "Inter_400Regular",
+    color: Colors.text,
+    lineHeight: 26,
+  },
   translationBlock: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.saffron,
-    overflow: "hidden",
-    marginBottom: 12,
+    backgroundColor: Colors.saffronLight,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: Colors.saffronMuted,
+    gap: 10,
   },
   translationHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 2,
+    gap: 6,
   },
   translationLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
     color: Colors.saffron,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
     flex: 1,
   },
-  textScroll: {
-    maxHeight: 220,
-    padding: 16,
+  listenOptionsContainer: {
+    gap: 10,
   },
-  extractedText: {
-    fontSize: 18,
-    fontFamily: "Inter_400Regular",
-    color: Colors.text,
-    lineHeight: 30,
+  listenOptionsLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
-  readAloudButton: {
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: Colors.saffron,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  readAloudGradient: {
+  listenBtn: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    paddingVertical: 20,
-    paddingHorizontal: 24,
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    borderWidth: 1.5,
   },
-  readAloudText: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
+  listenBtnOriginal: {
+    backgroundColor: Colors.saffron,
+    borderColor: Colors.saffronDark,
+  },
+  listenBtnPreferred: {
+    backgroundColor: Colors.saffronLight,
+    borderColor: Colors.saffronMuted,
+  },
+  listenBtnHindi: {
+    backgroundColor: Colors.greenLight,
+    borderColor: "#A5D6A7",
+  },
+  listenBtnTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  listenBtnTitle: {
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
     color: Colors.white,
+  },
+  listenBtnSub: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "rgba(255,255,255,0.75)",
   },
   audioControls: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
-    padding: 20,
-    gap: 16,
+    padding: 18,
+    gap: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    borderColor: Colors.saffronMuted,
+  },
+  audioActiveLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  audioActiveLabelText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.saffron,
+  },
+  stopBtn: {
+    padding: 2,
   },
   audioMainRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: 14,
   },
   audioControlBtn: {
-    borderRadius: 36,
+    borderRadius: 50,
     overflow: "hidden",
   },
   audioControlBtnGradient: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
   },
   audioReplayBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    backgroundColor: Colors.saffronLight,
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     borderRadius: 50,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Colors.saffronMuted,
+    backgroundColor: Colors.saffronLight,
   },
   audioReplayText: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Inter_600SemiBold",
     color: Colors.saffron,
   },
@@ -992,12 +1006,12 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   speedChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: 50,
-    backgroundColor: Colors.borderLight,
     borderWidth: 1,
     borderColor: Colors.border,
+    backgroundColor: Colors.borderLight,
     minWidth: 48,
     alignItems: "center",
   },

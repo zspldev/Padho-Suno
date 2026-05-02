@@ -7,9 +7,13 @@ PadhoSuno is a mobile-first application designed for visually impaired and low-l
 The app is built as a React Native / Expo application (targeting mobile + web) with an Express.js backend. The backend handles image uploads, OCR via Google Cloud Vision API, text-to-speech via Google Cloud TTS API, and persists scan history in a local SQLite database.
 
 **Key user-facing features:**
+- First-session language picker: 22 Sarvam-supported Indian languages to choose from
+- Header bar: burger menu icon (left), app title (centre), preferred language pill (right, tappable to change)
 - Scan/upload a document photo
 - Extract and display text (auto-detected language)
-- Read aloud the text with pause/resume/replay and speed controls (0.75x – 2x)
+- Three listen options: Listen (original language), Read in Preferred Language, Read in Hindi
+- Translate to chosen language then read aloud with Sarvam Bulbul v3 TTS
+- Pause/resume/replay and speed controls (0.75x – 2x)
 - View scan history with ability to replay audio for previous scans
 - Demo mode fallback when Google Cloud API key is not configured
 
