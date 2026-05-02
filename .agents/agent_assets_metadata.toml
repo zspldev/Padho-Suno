@@ -6,3 +6,9 @@ id = "wFsxm125JEZHu_ragzx9w"
 uri = "file://Padho-Suno.md"
 type = "text"
 title = "PadhoSuno — Full Project Documentation"
+
+[[outputs]]
+id = "voI7VX5GRz76shbcD6UxB"
+uri = "file://PadhoSuno - Full Project Documentation.md"
+type = "text"
+title = "PadhoSuno — Full Project Documentation"
