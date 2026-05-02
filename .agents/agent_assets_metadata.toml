@@ -1,5 +1,10 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "AtQZRD88uw6LMNH0rTph-"
+uri = "file://attached_assets/generated_images/padhosuno_splash.png"
+type = "image"
+title = "padhosuno splash screen"
 
 [[outputs]]
 id = "wFsxm125JEZHu_ragzx9w"
