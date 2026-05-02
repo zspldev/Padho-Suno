@@ -48,8 +48,8 @@ export default function ScanScreen() {
   const [errorMessage, setErrorMessage] = useState("");
   const [ttsLoading, setTtsLoading] = useState<string | null>(null);
   const [demoSpeaking, setDemoSpeaking] = useState(false);
-  const [translatedText, setTranslatedText] = useState<string | null>(null);
-  const [translating, setTranslating] = useState(false);
+  const [preferredTranslatedText, setPreferredTranslatedText] = useState<string | null>(null);
+  const [hindiTranslatedText, setHindiTranslatedText] = useState<string | null>(null);
   const [activeReadMode, setActiveReadMode] = useState<string | null>(null);
   const [showLangPicker, setShowLangPicker] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -91,7 +91,8 @@ export default function ScanScreen() {
         setScanState("loading");
         setErrorMessage("");
         setScanResult(null);
-        setTranslatedText(null);
+        setPreferredTranslatedText(null);
+        setHindiTranslatedText(null);
         setActiveReadMode(null);
         reset();
 
@@ -184,8 +185,10 @@ export default function ScanScreen() {
       const textToRead = tData.skipped ? scanResult.extractedText : tData.translatedText;
       const langToRead = tData.skipped ? scanResult.detectedLanguage : targetLang;
 
-      if (modeKey === `preferred-${targetLang}`) {
-        setTranslatedText(tData.skipped ? null : tData.translatedText);
+      if (modeKey === "hindi") {
+        setHindiTranslatedText(tData.skipped ? null : tData.translatedText);
+      } else if (modeKey.startsWith("preferred-")) {
+        setPreferredTranslatedText(tData.skipped ? null : tData.translatedText);
       }
 
       setTtsLoading(null);
@@ -410,24 +413,42 @@ export default function ScanScreen() {
               </ScrollView>
             </View>
 
-            {(translating || translatedText) && (
-              <View style={styles.translationBlock}>
-                <View style={styles.translationHeader}>
-                  <Ionicons name="language" size={15} color={Colors.saffron} />
-                  <Text style={styles.translationLabel}>
-                    Translated to {preferredLangOption.label}
-                  </Text>
-                  {translating && <ActivityIndicator size="small" color={Colors.saffron} style={{ marginLeft: 6 }} />}
-                </View>
-                {translatedText && (
-                  <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={styles.textScroll}>
-                    <Text style={styles.extractedText} selectable aria-label="Translated text">
-                      {translatedText}
+            {/* Box 2 — synced translation: shows the script matching the active listen option */}
+            {(() => {
+              const showingHindi    = activeReadMode === "hindi";
+              const showingPref     = activeReadMode?.startsWith("preferred-") ?? false;
+              const showBox         = showingHindi || showingPref;
+              if (!showBox) return null;
+
+              const isLoadingBox    = ttsLoading === (showingHindi ? "hindi" : `preferred-${preferredLang}`);
+              const boxText         = showingHindi ? hindiTranslatedText : preferredTranslatedText;
+              const boxLangLabel    = showingHindi ? "Hindi" : preferredLangOption.label;
+              const boxNativeLabel  = showingHindi ? "हिंदी" : preferredLangOption.nativeLabel;
+              const accentColor     = showingHindi ? Colors.green : Colors.indigo;
+              const accentLight     = showingHindi ? Colors.greenLight : Colors.indigoLight;
+
+              return (
+                <View style={[styles.translationBlock, { borderColor: accentColor + "40", backgroundColor: accentLight }]}>
+                  <View style={styles.translationHeader}>
+                    <Ionicons name="language" size={15} color={accentColor} />
+                    <Text style={[styles.translationLabel, { color: accentColor }]}>
+                      {boxNativeLabel}
                     </Text>
-                  </ScrollView>
-                )}
-              </View>
-            )}
+                    <Text style={styles.translationLabelSub}>· Translated · {boxLangLabel}</Text>
+                    {isLoadingBox && <ActivityIndicator size="small" color={accentColor} style={{ marginLeft: 4 }} />}
+                  </View>
+                  {boxText ? (
+                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={styles.textScroll}>
+                      <Text style={styles.extractedText} selectable aria-label="Translated text">
+                        {boxText}
+                      </Text>
+                    </ScrollView>
+                  ) : isLoadingBox ? (
+                    <Text style={[styles.translationPlaceholder, { color: accentColor }]}>Translating…</Text>
+                  ) : null}
+                </View>
+              );
+            })()}
 
             {/* ── Listen panel — always visible, options never disappear ── */}
             <View style={styles.listenPanel}>
@@ -942,23 +963,32 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
   translationBlock: {
-    backgroundColor: Colors.saffronLight,
     borderRadius: 20,
     padding: 18,
     borderWidth: 1.5,
-    borderColor: Colors.saffronMuted,
     gap: 10,
   },
   translationHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flexWrap: "wrap",
   },
   translationLabel: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.saffron,
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  translationLabelSub: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
     flex: 1,
+  },
+  translationPlaceholder: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    fontStyle: "italic",
+    paddingVertical: 4,
   },
   listenPanel: {
     gap: 10,
