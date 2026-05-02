@@ -429,148 +429,211 @@ export default function ScanScreen() {
               </View>
             )}
 
-            {isAudioActive ? (
-              <View style={styles.audioControls}>
-                <View style={styles.audioActiveLabel}>
-                  <Ionicons name="volume-high" size={16} color={Colors.saffron} />
-                  <Text style={styles.audioActiveLabelText}>
-                    {activeReadMode === "original"
-                      ? `Reading in ${getLangOption(scanResult.detectedLanguage).label}`
-                      : activeReadMode === "hindi"
-                      ? "Reading in Hindi"
-                      : `Reading in ${preferredLangOption.label}`}
-                  </Text>
-                  <Pressable onPress={stopAudio} style={styles.stopBtn} hitSlop={8}>
-                    <Ionicons name="stop-circle" size={22} color={Colors.error} />
-                  </Pressable>
-                </View>
+            {/* ── Listen panel — always visible, options never disappear ── */}
+            <View style={styles.listenPanel}>
+              <Text style={styles.listenSectionLabel}>Listen to document</Text>
 
-                <View style={styles.audioMainRow}>
-                  <Pressable
-                    onPress={handlePauseResume}
-                    style={styles.audioControlBtn}
-                    aria-label={audioState === "playing" ? "Pause" : "Resume"}
-                  >
-                    <LinearGradient colors={[Colors.saffron, Colors.saffronDark]} style={styles.audioControlBtnGradient}>
-                      <Ionicons
-                        name={audioState === "playing" || demoSpeaking ? "pause" : "play"}
-                        size={28}
-                        color={Colors.white}
-                      />
-                    </LinearGradient>
-                  </Pressable>
-                  <Pressable onPress={handleReplay} style={styles.audioReplayBtn} aria-label="Replay from start">
-                    <Ionicons name="refresh" size={22} color={Colors.saffron} />
-                    <Text style={styles.audioReplayText}>Replay</Text>
-                  </Pressable>
-                </View>
+              {/* Option 1 — original language */}
+              {(() => {
+                const mk = "original";
+                const isActive = activeReadMode === mk && isAudioActive;
+                const isLoading = ttsLoading === mk;
+                const isPlaying = isActive && (audioState === "playing" || demoSpeaking);
+                const otherLoading = ttsLoading !== null && !isLoading;
+                return (
+                  <View style={[styles.listenCard, isActive && styles.listenCardActiveOrange]}>
+                    <Pressable
+                      onPress={isActive ? undefined : handleReadOriginal}
+                      disabled={otherLoading || isLoading}
+                      style={({ pressed }) => [{ opacity: pressed && !isActive ? 0.8 : 1 }]}
+                      testID="listen-original-button"
+                    >
+                      <View style={styles.listenCardRow}>
+                        <View style={[styles.listenCardIcon, isActive && styles.listenCardIconActiveOrange]}>
+                          {isLoading
+                            ? <ActivityIndicator size="small" color={isActive ? Colors.white : Colors.saffron} />
+                            : <Ionicons name="volume-high" size={20} color={isActive ? Colors.white : Colors.saffron} />}
+                        </View>
+                        <View style={styles.listenCardText}>
+                          <Text style={[styles.listenCardTitle, isActive && { color: Colors.white }]}>
+                            {isLoading ? "Preparing audio..." : isActive ? "Now Reading" : "Listen"}
+                          </Text>
+                          <Text style={[styles.listenCardSub, isActive && { color: "rgba(255,255,255,0.75)" }]}>
+                            Original · {getLangOption(scanResult.detectedLanguage).label}
+                          </Text>
+                        </View>
+                        {!isActive && !isLoading && (
+                          <Ionicons name="play-circle" size={32} color={Colors.saffron} />
+                        )}
+                      </View>
+                    </Pressable>
 
-                {!demoSpeaking && (
-                  <View style={styles.speedRow}>
-                    <Ionicons name="speedometer-outline" size={16} color={Colors.textSecondary} />
-                    {SPEED_OPTIONS.map((s) => (
-                      <Pressable
-                        key={s}
-                        onPress={() => handleSpeedChange(s)}
-                        style={[styles.speedChip, speed === s && styles.speedChipActive]}
-                        hitSlop={8}
-                      >
-                        <Text style={[styles.speedChipText, speed === s && styles.speedChipTextActive]}>
-                          {s}x
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
-              </View>
-            ) : (
-              <View style={styles.listenOptionsContainer}>
-                <Text style={styles.listenOptionsLabel}>Listen to document</Text>
-
-                <Pressable
-                  onPress={handleReadOriginal}
-                  disabled={ttsLoading !== null}
-                  style={({ pressed }) => [
-                    styles.listenBtn,
-                    styles.listenBtnOriginal,
-                    pressed && { opacity: 0.85 },
-                    ttsLoading === "original" && { opacity: 0.7 },
-                  ]}
-                  aria-label="Listen in original language"
-                  testID="listen-original-button"
-                >
-                  {ttsLoading === "original" ? (
-                    <ActivityIndicator size="small" color={Colors.white} />
-                  ) : (
-                    <Ionicons name="volume-high" size={20} color={Colors.white} />
-                  )}
-                  <View style={styles.listenBtnTextBlock}>
-                    <Text style={styles.listenBtnTitle}>
-                      {ttsLoading === "original" ? "Preparing..." : "Listen"}
-                    </Text>
-                    <Text style={styles.listenBtnSub}>
-                      Original · {getLangOption(scanResult.detectedLanguage).label}
-                    </Text>
-                  </View>
-                </Pressable>
-
-                <Pressable
-                  onPress={handleReadPreferred}
-                  disabled={ttsLoading !== null}
-                  style={({ pressed }) => [
-                    styles.listenBtn,
-                    styles.listenBtnPreferred,
-                    pressed && { opacity: 0.85 },
-                    ttsLoading === `preferred-${preferredLang}` && { opacity: 0.7 },
-                  ]}
-                  aria-label={`Read in ${preferredLangOption.label}`}
-                  testID="listen-preferred-button"
-                >
-                  {ttsLoading === `preferred-${preferredLang}` ? (
-                    <ActivityIndicator size="small" color={Colors.saffron} />
-                  ) : (
-                    <Ionicons name="language" size={20} color={Colors.saffron} />
-                  )}
-                  <View style={styles.listenBtnTextBlock}>
-                    <Text style={[styles.listenBtnTitle, { color: Colors.saffron }]}>
-                      {ttsLoading === `preferred-${preferredLang}` ? "Preparing..." : `Read in ${preferredLangOption.label}`}
-                    </Text>
-                    <Text style={[styles.listenBtnSub, { color: Colors.textSecondary }]}>
-                      {preferredLangOption.nativeLabel} · Translated
-                    </Text>
-                  </View>
-                </Pressable>
-
-                {preferredLang !== "hi" && (
-                  <Pressable
-                    onPress={handleReadHindi}
-                    disabled={ttsLoading !== null}
-                    style={({ pressed }) => [
-                      styles.listenBtn,
-                      styles.listenBtnHindi,
-                      pressed && { opacity: 0.85 },
-                      ttsLoading === "hindi" && { opacity: 0.7 },
-                    ]}
-                    aria-label="Read in Hindi"
-                    testID="listen-hindi-button"
-                  >
-                    {ttsLoading === "hindi" ? (
-                      <ActivityIndicator size="small" color={Colors.green} />
-                    ) : (
-                      <Ionicons name="volume-medium" size={20} color={Colors.green} />
+                    {isActive && (
+                      <View style={styles.listenCardControls}>
+                        <View style={styles.listenCardControlsRow}>
+                          <Pressable onPress={handlePauseResume} style={styles.lcBtn} aria-label={isPlaying ? "Pause" : "Resume"}>
+                            <Ionicons name={isPlaying ? "pause-circle" : "play-circle"} size={40} color={Colors.white} />
+                          </Pressable>
+                          <Pressable onPress={handleReplay} style={styles.lcSecBtn}>
+                            <Ionicons name="refresh" size={18} color={Colors.white} />
+                            <Text style={styles.lcSecBtnText}>Replay</Text>
+                          </Pressable>
+                          <Pressable onPress={stopAudio} style={styles.lcSecBtn}>
+                            <Ionicons name="stop-circle-outline" size={18} color="rgba(255,255,255,0.7)" />
+                            <Text style={[styles.lcSecBtnText, { color: "rgba(255,255,255,0.7)" }]}>Stop</Text>
+                          </Pressable>
+                        </View>
+                        {!demoSpeaking && (
+                          <View style={styles.speedRow}>
+                            <Text style={styles.speedLabel}>Speed</Text>
+                            {SPEED_OPTIONS.map((s) => (
+                              <Pressable key={s} onPress={() => handleSpeedChange(s)}
+                                style={[styles.speedChipLight, speed === s && styles.speedChipLightActive]} hitSlop={8}>
+                                <Text style={[styles.speedChipLightText, speed === s && styles.speedChipLightTextActive]}>{s}x</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
+                      </View>
                     )}
-                    <View style={styles.listenBtnTextBlock}>
-                      <Text style={[styles.listenBtnTitle, { color: Colors.green }]}>
-                        {ttsLoading === "hindi" ? "Preparing..." : "Read in Hindi"}
-                      </Text>
-                      <Text style={[styles.listenBtnSub, { color: Colors.textSecondary }]}>
-                        हिंदी · Translated
-                      </Text>
-                    </View>
-                  </Pressable>
-                )}
-              </View>
-            )}
+                  </View>
+                );
+              })()}
+
+              {/* Option 2 — preferred language */}
+              {(() => {
+                const mk = `preferred-${preferredLang}`;
+                const isActive = activeReadMode === mk && isAudioActive;
+                const isLoading = ttsLoading === mk;
+                const isPlaying = isActive && (audioState === "playing" || demoSpeaking);
+                const otherLoading = ttsLoading !== null && !isLoading;
+                return (
+                  <View style={[styles.listenCard, isActive && styles.listenCardActiveOrange]}>
+                    <Pressable
+                      onPress={isActive ? undefined : handleReadPreferred}
+                      disabled={otherLoading || isLoading}
+                      style={({ pressed }) => [{ opacity: pressed && !isActive ? 0.8 : 1 }]}
+                      testID="listen-preferred-button"
+                    >
+                      <View style={styles.listenCardRow}>
+                        <View style={[styles.listenCardIcon, isActive ? styles.listenCardIconActiveOrange : styles.listenCardIconPref]}>
+                          {isLoading
+                            ? <ActivityIndicator size="small" color={isActive ? Colors.white : Colors.saffron} />
+                            : <Ionicons name="language" size={20} color={isActive ? Colors.white : Colors.saffron} />}
+                        </View>
+                        <View style={styles.listenCardText}>
+                          <Text style={[styles.listenCardTitle, isActive && { color: Colors.white }]}>
+                            {isLoading ? "Translating & preparing..." : isActive ? "Now Reading" : `Read in ${preferredLangOption.label}`}
+                          </Text>
+                          <Text style={[styles.listenCardSub, isActive && { color: "rgba(255,255,255,0.75)" }]}>
+                            {preferredLangOption.nativeLabel} · Translated to your language
+                          </Text>
+                        </View>
+                        {!isActive && !isLoading && (
+                          <Ionicons name="play-circle" size={32} color={Colors.saffron} />
+                        )}
+                      </View>
+                    </Pressable>
+
+                    {isActive && (
+                      <View style={styles.listenCardControls}>
+                        <View style={styles.listenCardControlsRow}>
+                          <Pressable onPress={handlePauseResume} style={styles.lcBtn} aria-label={isPlaying ? "Pause" : "Resume"}>
+                            <Ionicons name={isPlaying ? "pause-circle" : "play-circle"} size={40} color={Colors.white} />
+                          </Pressable>
+                          <Pressable onPress={handleReplay} style={styles.lcSecBtn}>
+                            <Ionicons name="refresh" size={18} color={Colors.white} />
+                            <Text style={styles.lcSecBtnText}>Replay</Text>
+                          </Pressable>
+                          <Pressable onPress={stopAudio} style={styles.lcSecBtn}>
+                            <Ionicons name="stop-circle-outline" size={18} color="rgba(255,255,255,0.7)" />
+                            <Text style={[styles.lcSecBtnText, { color: "rgba(255,255,255,0.7)" }]}>Stop</Text>
+                          </Pressable>
+                        </View>
+                        {!demoSpeaking && (
+                          <View style={styles.speedRow}>
+                            <Text style={styles.speedLabel}>Speed</Text>
+                            {SPEED_OPTIONS.map((s) => (
+                              <Pressable key={s} onPress={() => handleSpeedChange(s)}
+                                style={[styles.speedChipLight, speed === s && styles.speedChipLightActive]} hitSlop={8}>
+                                <Text style={[styles.speedChipLightText, speed === s && styles.speedChipLightTextActive]}>{s}x</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
+
+              {/* Option 3 — Hindi (only shown when preferred lang is not already Hindi) */}
+              {preferredLang !== "hi" && (() => {
+                const mk = "hindi";
+                const isActive = activeReadMode === mk && isAudioActive;
+                const isLoading = ttsLoading === mk;
+                const isPlaying = isActive && (audioState === "playing" || demoSpeaking);
+                const otherLoading = ttsLoading !== null && !isLoading;
+                return (
+                  <View style={[styles.listenCard, isActive && styles.listenCardActiveGreen]}>
+                    <Pressable
+                      onPress={isActive ? undefined : handleReadHindi}
+                      disabled={otherLoading || isLoading}
+                      style={({ pressed }) => [{ opacity: pressed && !isActive ? 0.8 : 1 }]}
+                      testID="listen-hindi-button"
+                    >
+                      <View style={styles.listenCardRow}>
+                        <View style={[styles.listenCardIcon, isActive ? styles.listenCardIconActiveGreen : styles.listenCardIconHindi]}>
+                          {isLoading
+                            ? <ActivityIndicator size="small" color={isActive ? Colors.white : Colors.green} />
+                            : <Ionicons name="volume-medium" size={20} color={isActive ? Colors.white : Colors.green} />}
+                        </View>
+                        <View style={styles.listenCardText}>
+                          <Text style={[styles.listenCardTitle, isActive && { color: Colors.white }]}>
+                            {isLoading ? "Translating & preparing..." : isActive ? "Now Reading" : "Read in Hindi"}
+                          </Text>
+                          <Text style={[styles.listenCardSub, isActive && { color: "rgba(255,255,255,0.75)" }]}>
+                            हिंदी · Translated to Hindi
+                          </Text>
+                        </View>
+                        {!isActive && !isLoading && (
+                          <Ionicons name="play-circle" size={32} color={Colors.green} />
+                        )}
+                      </View>
+                    </Pressable>
+
+                    {isActive && (
+                      <View style={styles.listenCardControls}>
+                        <View style={styles.listenCardControlsRow}>
+                          <Pressable onPress={handlePauseResume} style={styles.lcBtn} aria-label={isPlaying ? "Pause" : "Resume"}>
+                            <Ionicons name={isPlaying ? "pause-circle" : "play-circle"} size={40} color={Colors.white} />
+                          </Pressable>
+                          <Pressable onPress={handleReplay} style={styles.lcSecBtn}>
+                            <Ionicons name="refresh" size={18} color={Colors.white} />
+                            <Text style={styles.lcSecBtnText}>Replay</Text>
+                          </Pressable>
+                          <Pressable onPress={stopAudio} style={styles.lcSecBtn}>
+                            <Ionicons name="stop-circle-outline" size={18} color="rgba(255,255,255,0.7)" />
+                            <Text style={[styles.lcSecBtnText, { color: "rgba(255,255,255,0.7)" }]}>Stop</Text>
+                          </Pressable>
+                        </View>
+                        {!demoSpeaking && (
+                          <View style={styles.speedRow}>
+                            <Text style={styles.speedLabel}>Speed</Text>
+                            {SPEED_OPTIONS.map((s) => (
+                              <Pressable key={s} onPress={() => handleSpeedChange(s)}
+                                style={[styles.speedChipLight, speed === s && styles.speedChipLightActive]} hitSlop={8}>
+                                <Text style={[styles.speedChipLightText, speed === s && styles.speedChipLightTextActive]}>{s}x</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
+            </View>
 
             <View style={styles.savedRow}>
               <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
@@ -899,133 +962,144 @@ const styles = StyleSheet.create({
     color: Colors.saffron,
     flex: 1,
   },
-  listenOptionsContainer: {
+  listenPanel: {
     gap: 10,
   },
-  listenOptionsLabel: {
-    fontSize: 13,
+  listenSectionLabel: {
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
     color: Colors.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     marginBottom: 2,
   },
-  listenBtn: {
+  listenCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  listenCardActiveOrange: {
+    backgroundColor: Colors.saffron,
+    borderColor: Colors.saffronDark,
+  },
+  listenCardActiveGreen: {
+    backgroundColor: Colors.green,
+    borderColor: "#0a6600",
+  },
+  listenCardRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     paddingVertical: 16,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    paddingHorizontal: 16,
   },
-  listenBtnOriginal: {
-    backgroundColor: Colors.saffron,
-    borderColor: Colors.saffronDark,
-  },
-  listenBtnPreferred: {
-    backgroundColor: Colors.saffronLight,
-    borderColor: Colors.saffronMuted,
-  },
-  listenBtnHindi: {
-    backgroundColor: Colors.greenLight,
-    borderColor: "#A5D6A7",
-  },
-  listenBtnTextBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  listenBtnTitle: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.white,
-  },
-  listenBtnSub: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "rgba(255,255,255,0.75)",
-  },
-  audioControls: {
-    backgroundColor: Colors.surface,
+  listenCardIcon: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    padding: 18,
-    gap: 14,
-    borderWidth: 1,
-    borderColor: Colors.saffronMuted,
-  },
-  audioActiveLabel: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  audioActiveLabelText: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.saffron,
-  },
-  stopBtn: {
-    padding: 2,
-  },
-  audioMainRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  audioControlBtn: {
-    borderRadius: 50,
-    overflow: "hidden",
-  },
-  audioControlBtnGradient: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    backgroundColor: Colors.saffronLight,
     alignItems: "center",
     justifyContent: "center",
   },
-  audioReplayBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 50,
-    borderWidth: 1.5,
-    borderColor: Colors.saffronMuted,
+  listenCardIconActiveOrange: {
+    backgroundColor: "rgba(255,255,255,0.25)",
+  },
+  listenCardIconActiveGreen: {
+    backgroundColor: "rgba(255,255,255,0.25)",
+  },
+  listenCardIconPref: {
     backgroundColor: Colors.saffronLight,
   },
-  audioReplayText: {
-    fontSize: 14,
+  listenCardIconHindi: {
+    backgroundColor: Colors.greenLight,
+  },
+  listenCardText: {
+    flex: 1,
+    gap: 3,
+  },
+  listenCardTitle: {
+    fontSize: 16,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.saffron,
+    color: Colors.text,
+  },
+  listenCardSub: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    lineHeight: 16,
+  },
+  listenCardControls: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.2)",
+    marginTop: 0,
+  },
+  listenCardControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingTop: 12,
+  },
+  lcBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lcSecBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 50,
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  lcSecBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.white,
   },
   speedRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     flexWrap: "wrap",
   },
-  speedChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+  speedLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: "rgba(255,255,255,0.7)",
+    marginRight: 2,
+  },
+  speedChipLight: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
     borderRadius: 50,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.borderLight,
-    minWidth: 48,
+    borderColor: "rgba(255,255,255,0.3)",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    minWidth: 44,
     alignItems: "center",
   },
-  speedChipActive: {
-    backgroundColor: Colors.saffron,
-    borderColor: Colors.saffronDark,
+  speedChipLightActive: {
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderColor: Colors.white,
   },
-  speedChipText: {
-    fontSize: 13,
+  speedChipLightText: {
+    fontSize: 12,
     fontFamily: "Inter_500Medium",
-    color: Colors.textSecondary,
+    color: "rgba(255,255,255,0.85)",
   },
-  speedChipTextActive: {
-    color: Colors.white,
+  speedChipLightTextActive: {
+    color: Colors.saffron,
     fontFamily: "Inter_700Bold",
   },
   savedRow: {
