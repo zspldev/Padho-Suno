@@ -303,10 +303,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!entry) {
       return res.status(404).json({ message: "Audio not found or expired" });
     }
+
+    const buffer = entry.buffer;
+    const total = buffer.length;
+    const rangeHeader = req.headers["range"];
+
+    res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Content-Type", entry.contentType);
-    res.setHeader("Content-Length", entry.buffer.length);
     res.setHeader("Cache-Control", "private, max-age=900");
-    res.send(entry.buffer);
+
+    if (rangeHeader) {
+      const parts = rangeHeader.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
+      const chunkSize = end - start + 1;
+
+      res.setHeader("Content-Range", `bytes ${start}-${end}/${total}`);
+      res.setHeader("Content-Length", chunkSize);
+      res.status(206);
+      res.send(buffer.slice(start, end + 1));
+    } else {
+      res.setHeader("Content-Length", total);
+      res.status(200);
+      res.send(buffer);
+    }
   });
 
   app.post("/api/translate", async (req, res) => {
