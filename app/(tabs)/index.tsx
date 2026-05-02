@@ -433,15 +433,16 @@ export default function ScanScreen() {
             <View style={styles.listenPanel}>
               <Text style={styles.listenSectionLabel}>Listen to document</Text>
 
-              {/* Option 1 — original language */}
+              {/* Option 1 — original language · saffron */}
               {(() => {
                 const mk = "original";
                 const isActive = activeReadMode === mk && isAudioActive;
                 const isLoading = ttsLoading === mk;
                 const isPlaying = isActive && (audioState === "playing" || demoSpeaking);
                 const otherLoading = ttsLoading !== null && !isLoading;
+                const detectedOpt = getLangOption(scanResult.detectedLanguage);
                 return (
-                  <View style={[styles.listenCard, isActive && styles.listenCardActiveOrange]}>
+                  <View style={[styles.listenCard, styles.listenCardBorderOrange, isActive && styles.listenCardActiveOrange]}>
                     <Pressable
                       onPress={isActive ? undefined : handleReadOriginal}
                       disabled={otherLoading || isLoading}
@@ -449,17 +450,17 @@ export default function ScanScreen() {
                       testID="listen-original-button"
                     >
                       <View style={styles.listenCardRow}>
-                        <View style={[styles.listenCardIcon, isActive && styles.listenCardIconActiveOrange]}>
+                        <View style={[styles.listenCardIcon, styles.listenCardIconOrange, isActive && styles.listenCardIconActiveOrange]}>
                           {isLoading
                             ? <ActivityIndicator size="small" color={isActive ? Colors.white : Colors.saffron} />
                             : <Ionicons name="volume-high" size={20} color={isActive ? Colors.white : Colors.saffron} />}
                         </View>
                         <View style={styles.listenCardText}>
-                          <Text style={[styles.listenCardTitle, isActive && { color: Colors.white }]}>
-                            {isLoading ? "Preparing audio..." : isActive ? "Now Reading" : "Listen"}
+                          <Text style={[styles.listenCardTitle, { color: isActive ? Colors.white : Colors.saffron }]}>
+                            {isLoading ? "Preparing audio..." : detectedOpt.nativeLabel}
                           </Text>
-                          <Text style={[styles.listenCardSub, isActive && { color: "rgba(255,255,255,0.75)" }]}>
-                            Original · {getLangOption(scanResult.detectedLanguage).label}
+                          <Text style={[styles.listenCardSub, isActive && { color: "rgba(255,255,255,0.8)" }]}>
+                            Original · {detectedOpt.label}
                           </Text>
                         </View>
                         {!isActive && !isLoading && (
@@ -467,7 +468,6 @@ export default function ScanScreen() {
                         )}
                       </View>
                     </Pressable>
-
                     {isActive && (
                       <View style={styles.listenCardControls}>
                         <View style={styles.listenCardControlsRow}>
@@ -500,7 +500,7 @@ export default function ScanScreen() {
                 );
               })()}
 
-              {/* Option 2 — preferred language */}
+              {/* Option 2 — preferred language · indigo */}
               {(() => {
                 const mk = `preferred-${preferredLang}`;
                 const isActive = activeReadMode === mk && isAudioActive;
@@ -508,7 +508,7 @@ export default function ScanScreen() {
                 const isPlaying = isActive && (audioState === "playing" || demoSpeaking);
                 const otherLoading = ttsLoading !== null && !isLoading;
                 return (
-                  <View style={[styles.listenCard, isActive && styles.listenCardActiveOrange]}>
+                  <View style={[styles.listenCard, styles.listenCardBorderIndigo, isActive && styles.listenCardActiveIndigo]}>
                     <Pressable
                       onPress={isActive ? undefined : handleReadPreferred}
                       disabled={otherLoading || isLoading}
@@ -516,25 +516,24 @@ export default function ScanScreen() {
                       testID="listen-preferred-button"
                     >
                       <View style={styles.listenCardRow}>
-                        <View style={[styles.listenCardIcon, isActive ? styles.listenCardIconActiveOrange : styles.listenCardIconPref]}>
+                        <View style={[styles.listenCardIcon, styles.listenCardIconPref, isActive && styles.listenCardIconActiveIndigo]}>
                           {isLoading
-                            ? <ActivityIndicator size="small" color={isActive ? Colors.white : Colors.saffron} />
-                            : <Ionicons name="language" size={20} color={isActive ? Colors.white : Colors.saffron} />}
+                            ? <ActivityIndicator size="small" color={isActive ? Colors.white : Colors.indigo} />
+                            : <Ionicons name="language" size={20} color={isActive ? Colors.white : Colors.indigo} />}
                         </View>
                         <View style={styles.listenCardText}>
-                          <Text style={[styles.listenCardTitle, isActive && { color: Colors.white }]}>
-                            {isLoading ? "Translating & preparing..." : isActive ? "Now Reading" : `Read in ${preferredLangOption.label}`}
+                          <Text style={[styles.listenCardTitle, { color: isActive ? Colors.white : Colors.indigo }]}>
+                            {isLoading ? "Translating & preparing..." : preferredLangOption.nativeLabel}
                           </Text>
-                          <Text style={[styles.listenCardSub, isActive && { color: "rgba(255,255,255,0.75)" }]}>
-                            {preferredLangOption.nativeLabel} · Translated to your language
+                          <Text style={[styles.listenCardSub, isActive && { color: "rgba(255,255,255,0.8)" }]}>
+                            Translated · {preferredLangOption.label}
                           </Text>
                         </View>
                         {!isActive && !isLoading && (
-                          <Ionicons name="play-circle" size={32} color={Colors.saffron} />
+                          <Ionicons name="play-circle" size={32} color={Colors.indigo} />
                         )}
                       </View>
                     </Pressable>
-
                     {isActive && (
                       <View style={styles.listenCardControls}>
                         <View style={styles.listenCardControlsRow}>
@@ -567,7 +566,7 @@ export default function ScanScreen() {
                 );
               })()}
 
-              {/* Option 3 — Hindi (only shown when preferred lang is not already Hindi) */}
+              {/* Option 3 — Hindi · green (only when preferred ≠ Hindi) */}
               {preferredLang !== "hi" && (() => {
                 const mk = "hindi";
                 const isActive = activeReadMode === mk && isAudioActive;
@@ -575,7 +574,7 @@ export default function ScanScreen() {
                 const isPlaying = isActive && (audioState === "playing" || demoSpeaking);
                 const otherLoading = ttsLoading !== null && !isLoading;
                 return (
-                  <View style={[styles.listenCard, isActive && styles.listenCardActiveGreen]}>
+                  <View style={[styles.listenCard, styles.listenCardBorderGreen, isActive && styles.listenCardActiveGreen]}>
                     <Pressable
                       onPress={isActive ? undefined : handleReadHindi}
                       disabled={otherLoading || isLoading}
@@ -583,17 +582,17 @@ export default function ScanScreen() {
                       testID="listen-hindi-button"
                     >
                       <View style={styles.listenCardRow}>
-                        <View style={[styles.listenCardIcon, isActive ? styles.listenCardIconActiveGreen : styles.listenCardIconHindi]}>
+                        <View style={[styles.listenCardIcon, styles.listenCardIconHindi, isActive && styles.listenCardIconActiveGreen]}>
                           {isLoading
                             ? <ActivityIndicator size="small" color={isActive ? Colors.white : Colors.green} />
                             : <Ionicons name="volume-medium" size={20} color={isActive ? Colors.white : Colors.green} />}
                         </View>
                         <View style={styles.listenCardText}>
-                          <Text style={[styles.listenCardTitle, isActive && { color: Colors.white }]}>
-                            {isLoading ? "Translating & preparing..." : isActive ? "Now Reading" : "Read in Hindi"}
+                          <Text style={[styles.listenCardTitle, { color: isActive ? Colors.white : Colors.green }]}>
+                            {isLoading ? "Translating & preparing..." : "हिंदी"}
                           </Text>
-                          <Text style={[styles.listenCardSub, isActive && { color: "rgba(255,255,255,0.75)" }]}>
-                            हिंदी · Translated to Hindi
+                          <Text style={[styles.listenCardSub, isActive && { color: "rgba(255,255,255,0.8)" }]}>
+                            Translated · Hindi
                           </Text>
                         </View>
                         {!isActive && !isLoading && (
@@ -601,7 +600,6 @@ export default function ScanScreen() {
                         )}
                       </View>
                     </Pressable>
-
                     {isActive && (
                       <View style={styles.listenCardControls}>
                         <View style={styles.listenCardControlsRow}>
@@ -985,9 +983,22 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  listenCardBorderOrange: {
+    borderColor: Colors.saffronMuted,
+  },
+  listenCardBorderIndigo: {
+    borderColor: Colors.indigoMuted,
+  },
+  listenCardBorderGreen: {
+    borderColor: "#A5D6A7",
+  },
   listenCardActiveOrange: {
     backgroundColor: Colors.saffron,
     borderColor: Colors.saffronDark,
+  },
+  listenCardActiveIndigo: {
+    backgroundColor: Colors.indigo,
+    borderColor: Colors.indigoDark,
   },
   listenCardActiveGreen: {
     backgroundColor: Colors.green,
@@ -1004,21 +1015,26 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.saffronLight,
     alignItems: "center",
     justifyContent: "center",
+  },
+  listenCardIconOrange: {
+    backgroundColor: Colors.saffronLight,
   },
   listenCardIconActiveOrange: {
     backgroundColor: "rgba(255,255,255,0.25)",
   },
-  listenCardIconActiveGreen: {
-    backgroundColor: "rgba(255,255,255,0.25)",
-  },
   listenCardIconPref: {
-    backgroundColor: Colors.saffronLight,
+    backgroundColor: Colors.indigoLight,
+  },
+  listenCardIconActiveIndigo: {
+    backgroundColor: "rgba(255,255,255,0.25)",
   },
   listenCardIconHindi: {
     backgroundColor: Colors.greenLight,
+  },
+  listenCardIconActiveGreen: {
+    backgroundColor: "rgba(255,255,255,0.25)",
   },
   listenCardText: {
     flex: 1,
