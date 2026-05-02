@@ -248,8 +248,8 @@ export default function ScanScreen() {
     setScanState("idle");
     setScanResult(null);
     setErrorMessage("");
-    setTranslatedText(null);
-    setTranslating(false);
+    setPreferredTranslatedText(null);
+    setHindiTranslatedText(null);
   }, [reset]);
 
   const stopAudio = useCallback(async () => {
