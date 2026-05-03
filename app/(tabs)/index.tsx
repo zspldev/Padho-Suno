@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -21,7 +21,9 @@ import Colors from "@/constants/colors";
 import { uploadScanImage, apiRequest } from "@/lib/query-client";
 import { useAudio, SPEED_OPTIONS } from "@/hooks/useAudio";
 import { useLanguage } from "@/context/LanguageContext";
+import { usePreferences } from "@/context/PreferencesContext";
 import LanguagePickerModal from "@/components/LanguagePickerModal";
+import DrawerMenu from "@/components/DrawerMenu";
 
 type ScanState = "idle" | "loading" | "result" | "error";
 
@@ -52,10 +54,16 @@ export default function ScanScreen() {
   const [hindiTranslatedText, setHindiTranslatedText] = useState<string | null>(null);
   const [activeReadMode, setActiveReadMode] = useState<string | null>(null);
   const [showLangPicker, setShowLangPicker] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const { preferredLang, setPreferredLang, getLangOption, hasPickedLanguage, markLanguagePicked } = useLanguage();
+  const { fontScale, defaultSpeed } = usePreferences();
   const { audioState, speed, playBase64Audio, pause, resume, replay, setSpeed, reset } = useAudio();
+
+  useEffect(() => {
+    setSpeed(defaultSpeed);
+  }, [defaultSpeed]);
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, { toValue: 0.93, useNativeDriver: true }).start();
@@ -268,6 +276,12 @@ export default function ScanScreen() {
 
   return (
     <View style={styles.container}>
+      <DrawerMenu
+        visible={showDrawer}
+        onClose={() => setShowDrawer(false)}
+        onOpenLanguage={() => setShowLangPicker(true)}
+      />
+
       <LanguagePickerModal
         visible={!hasPickedLanguage || showLangPicker}
         isFirstLaunch={!hasPickedLanguage}
@@ -282,6 +296,7 @@ export default function ScanScreen() {
           hitSlop={12}
           aria-label="Menu"
           testID="menu-button"
+          onPress={() => setShowDrawer(true)}
         >
           <Ionicons name="menu" size={26} color={Colors.text} />
         </Pressable>
@@ -407,7 +422,7 @@ export default function ScanScreen() {
                 Original — {getLangOption(scanResult.detectedLanguage).label || scanResult.languageLabel}
               </Text>
               <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={styles.textScroll}>
-                <Text style={styles.extractedText} selectable aria-label="Extracted text">
+                <Text style={[styles.extractedText, { fontSize: 16 * fontScale, lineHeight: 26 * fontScale }]} selectable aria-label="Extracted text">
                   {scanResult.extractedText}
                 </Text>
               </ScrollView>
@@ -439,7 +454,7 @@ export default function ScanScreen() {
                   </View>
                   {boxText ? (
                     <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={styles.textScroll}>
-                      <Text style={styles.extractedText} selectable aria-label="Translated text">
+                      <Text style={[styles.extractedText, { fontSize: 16 * fontScale, lineHeight: 26 * fontScale }]} selectable aria-label="Translated text">
                         {boxText}
                       </Text>
                     </ScrollView>

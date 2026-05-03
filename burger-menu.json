@@ -1,0 +1,37 @@
+{
+  "groups": [
+    {
+      "key": "preferences",
+      "label": "Preferences",
+      "items": [
+        { "key": "language",      "label": "Language",      "icon": "language-outline",          "action": "language" },
+        { "key": "reading_speed", "label": "Reading Speed", "icon": "speedometer-outline",        "action": "reading_speed" },
+        { "key": "text_size",     "label": "Text Size",     "icon": "text-outline",               "action": "text_size" }
+      ]
+    },
+    {
+      "key": "information",
+      "label": "Information",
+      "items": [
+        { "key": "how_to_use", "label": "How to Use", "icon": "help-circle-outline",        "action": "how_to_use" },
+        { "key": "about",      "label": "About",       "icon": "information-circle-outline", "action": "about" }
+      ]
+    },
+    {
+      "key": "community",
+      "label": "Community",
+      "items": [
+        { "key": "share_app", "label": "Share App", "icon": "share-social-outline", "action": "share" },
+        { "key": "rate_app",  "label": "Rate App",  "icon": "star-outline",         "action": "rate" }
+      ]
+    },
+    {
+      "key": "support",
+      "label": "Support",
+      "items": [
+        { "key": "feedback", "label": "Send Feedback",  "icon": "chatbubble-ellipses-outline", "action": "feedback" },
+        { "key": "privacy",  "label": "Privacy Policy", "icon": "shield-checkmark-outline",    "action": "external", "url": "https://padhosuno.app/privacy" }
+      ]
+    }
+  ]
+}

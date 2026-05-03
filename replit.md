@@ -9,6 +9,10 @@ The app is built as a React Native / Expo application (targeting mobile + web) w
 **Key user-facing features:**
 - First-session language picker: 22 Sarvam-supported Indian languages to choose from
 - Header bar: burger menu icon (left), app title (centre), preferred language pill (right, tappable to change)
+- Hamburger drawer menu: slides in from left with 4 groups — Preferences (Language, Reading Speed, Text Size), Information (How to Use, About), Community (Share, Rate), Support (Feedback, Privacy)
+- Reading Speed preference: 5 options (0.75×–2×), persisted via AsyncStorage, auto-applied on each new playback
+- Text Size preference: 4 options (Small/Medium/Large/X-Large → fontScale 0.85–1.45), persisted via AsyncStorage, applied to extracted and translated text blocks
+- How to Use & About modals embedded inside the drawer (no separate routes needed)
 - Scan/upload a document photo
 - Extract and display text (auto-detected language)
 - Three listen options: Listen (original language), Read in Preferred Language, Read in Hindi
