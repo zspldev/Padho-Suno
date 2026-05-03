@@ -125,6 +125,18 @@ Language is auto-detected from OCR results. Falls back to a mock Hindi medicine 
 | `react-native-gesture-handler` | Touch gesture support |
 | `react-native-keyboard-controller` | Keyboard-aware scroll views |
 
+### Splash Screen Architecture
+
+- **Native (Expo Go / device):** `SplashScreen.preventAutoHideAsync()` is called on module load. After fonts load, `SplashScreen.hideAsync()` is delayed by 2200ms so the system splash stays visible for 2+ seconds. No React component involved.
+- **Web:** `SplashScreen.hideAsync()` fires immediately when fonts load. A React in-app overlay (`components/AppSplashScreen.tsx`) renders BEFORE the provider tree in `_layout.tsx` using `if (Platform.OS === "web" && !splashDone) return <AppSplashScreen />`. This ensures no modals or providers can render beneath it. Uses `useRef(new Animated.Value(...))` with `useNativeDriver: false` (web-safe). Calls `onFinished` after 2200ms exit animation; then full provider tree mounts.
+
+### DrawerMenu Architecture
+
+- **No Modal wrapper**: The drawer avoids the React Native `Modal` component (which uses a web portal and can have z-index/click issues on web). Instead it renders as `StyleSheet.absoluteFillObject` with `zIndex: 999` directly in the React component tree.
+- **Mounted gate**: `mounted` state (starts `false`) controls whether the View renders at all (avoids invisible layers). When `visible` prop changes to `true`, `setMounted(true)` is called and animations run.
+- `useNativeDriver: Platform.OS !== "web"` used for all Animated.timing calls to suppress web warnings.
+- Inner "About" and "How to Use" sub-modals use `<Modal>` (fine for secondary overlays inside the already-mounted drawer).
+
 ### No External Database
 
 The app intentionally uses a local SQLite file (`./data/padho-suno.db`) — no cloud database or external DB service is required or used.

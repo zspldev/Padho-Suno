@@ -10,6 +10,7 @@ import {
   Linking,
   ScrollView,
   Dimensions,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -44,12 +45,13 @@ interface Props {
 }
 
 const APP_VERSION = Constants.expoConfig?.version ?? "1.0.0";
+const nd = Platform.OS !== "web";
 
 export default function DrawerMenu({ visible, onClose, onOpenLanguage }: Props) {
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const [modalActive, setModalActive] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [activeModal, setActiveModal] = useState<"about" | "how_to_use" | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
@@ -57,16 +59,18 @@ export default function DrawerMenu({ visible, onClose, onOpenLanguage }: Props) 
 
   useEffect(() => {
     if (visible) {
-      setModalActive(true);
+      setMounted(true);
+      slideAnim.setValue(-DRAWER_WIDTH);
+      fadeAnim.setValue(0);
       Animated.parallel([
-        Animated.timing(slideAnim, { toValue: 0,            duration: 270, useNativeDriver: true }),
-        Animated.timing(fadeAnim,  { toValue: 1,            duration: 270, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0,   duration: 270, useNativeDriver: nd }),
+        Animated.timing(fadeAnim,  { toValue: 1,   duration: 270, useNativeDriver: nd }),
       ]).start();
-    } else {
+    } else if (mounted) {
       Animated.parallel([
-        Animated.timing(slideAnim, { toValue: -DRAWER_WIDTH, duration: 220, useNativeDriver: true }),
-        Animated.timing(fadeAnim,  { toValue: 0,             duration: 220, useNativeDriver: true }),
-      ]).start(() => setModalActive(false));
+        Animated.timing(slideAnim, { toValue: -DRAWER_WIDTH, duration: 220, useNativeDriver: nd }),
+        Animated.timing(fadeAnim,  { toValue: 0,             duration: 220, useNativeDriver: nd }),
+      ]).start(() => setMounted(false));
     }
   }, [visible]);
 
@@ -108,119 +112,118 @@ export default function DrawerMenu({ visible, onClose, onOpenLanguage }: Props) 
 
   const groups: MenuGroup[] = (menuData as any).groups;
 
+  if (!mounted) return null;
+
   return (
-    <Modal transparent visible={modalActive} onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.overlay}>
-        <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        </Animated.View>
+    <View style={styles.root} pointerEvents="box-none">
+      {/* Backdrop */}
+      <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]} pointerEvents="auto">
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} testID="drawer-backdrop" />
+      </Animated.View>
 
-        <Animated.View
-          style={[styles.drawer, { paddingTop: insets.top, transform: [{ translateX: slideAnim }] }]}
-        >
-          {/* Header */}
-          <View style={styles.drawerHeader}>
-            <View style={styles.appIconCircle}>
-              <Ionicons name="book" size={24} color={Colors.white} />
-            </View>
-            <View style={styles.appTitleBlock}>
-              <Text style={styles.appName}>PadhoSuno</Text>
-              <Text style={styles.appNameNative}>पढ़ो सुनो</Text>
-            </View>
-            <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
-              <Ionicons name="close" size={22} color={Colors.white} />
-            </Pressable>
+      {/* Drawer panel */}
+      <Animated.View
+        style={[styles.drawer, { paddingTop: insets.top, transform: [{ translateX: slideAnim }] }]}
+      >
+        {/* Header */}
+        <View style={styles.drawerHeader}>
+          <View style={styles.appIconCircle}>
+            <Ionicons name="book" size={24} color={Colors.white} />
           </View>
+          <View style={styles.appTitleBlock}>
+            <Text style={styles.appName}>PadhoSuno</Text>
+            <Text style={styles.appNameNative}>पढ़ो सुनो</Text>
+          </View>
+          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
+            <Ionicons name="close" size={22} color={Colors.white} />
+          </Pressable>
+        </View>
 
-          {/* Menu items */}
-          <ScrollView
-            style={styles.menuScroll}
-            contentContainerStyle={[styles.menuContent, { paddingBottom: insets.bottom + 16 }]}
-            showsVerticalScrollIndicator={false}
-          >
-            {groups.map((group, gi) => (
-              <View key={group.key} style={[styles.group, gi > 0 && styles.groupSpacing]}>
-                <Text style={styles.groupLabel}>{group.label}</Text>
-                {group.items.map((item) => (
-                  <View key={item.key}>
-                    <Pressable
-                      onPress={() => handleAction(item)}
-                      style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
-                    >
-                      <View style={styles.menuItemIcon}>
-                        <Ionicons name={item.icon as any} size={20} color={Colors.saffron} />
-                      </View>
-                      <Text style={styles.menuItemLabel}>{item.label}</Text>
+        {/* Menu items */}
+        <ScrollView
+          style={styles.menuScroll}
+          contentContainerStyle={[styles.menuContent, { paddingBottom: insets.bottom + 16 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {groups.map((group, gi) => (
+            <View key={group.key} style={[styles.group, gi > 0 && styles.groupSpacing]}>
+              <Text style={styles.groupLabel}>{group.label}</Text>
+              {group.items.map((item) => (
+                <View key={item.key}>
+                  <Pressable
+                    onPress={() => handleAction(item)}
+                    style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
+                    testID={`drawer-item-${item.key}`}
+                  >
+                    <View style={styles.menuItemIcon}>
+                      <Ionicons name={item.icon as any} size={20} color={Colors.saffron} />
+                    </View>
+                    <Text style={styles.menuItemLabel}>{item.label}</Text>
 
-                      {/* Inline value badges */}
-                      {item.action === "text_size" && (
-                        <Text style={styles.menuItemBadge}>
-                          {TEXT_SIZE_OPTIONS.find((o) => o.key === textSize)?.label}
-                        </Text>
-                      )}
-                      {item.action === "reading_speed" && (
-                        <Text style={styles.menuItemBadge}>{defaultSpeed}×</Text>
-                      )}
-
-                      <Ionicons
-                        name={
-                          (item.action === "reading_speed" || item.action === "text_size")
-                            ? expandedKey === item.action ? "chevron-up" : "chevron-down"
-                            : item.action === "external" || item.action === "rate" || item.action === "feedback"
-                            ? "open-outline"
-                            : "chevron-forward"
-                        }
-                        size={15}
-                        color={Colors.textMuted}
-                      />
-                    </Pressable>
-
-                    {/* Reading speed inline picker */}
-                    {item.action === "reading_speed" && expandedKey === "reading_speed" && (
-                      <View style={styles.inlinePicker}>
-                        {SPEED_OPTIONS_PREF.map((s) => (
-                          <Pressable
-                            key={s}
-                            onPress={() => setDefaultSpeed(s)}
-                            style={[styles.chip, defaultSpeed === s && styles.chipActive]}
-                          >
-                            <Text style={[styles.chipText, defaultSpeed === s && styles.chipTextActive]}>
-                              {s}×
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
+                    {item.action === "text_size" && (
+                      <Text style={styles.menuItemBadge}>
+                        {TEXT_SIZE_OPTIONS.find((o) => o.key === textSize)?.label}
+                      </Text>
+                    )}
+                    {item.action === "reading_speed" && (
+                      <Text style={styles.menuItemBadge}>{defaultSpeed}×</Text>
                     )}
 
-                    {/* Text size inline picker */}
-                    {item.action === "text_size" && expandedKey === "text_size" && (
-                      <View style={styles.inlinePicker}>
-                        {TEXT_SIZE_OPTIONS.map((o) => (
-                          <Pressable
-                            key={o.key}
-                            onPress={() => setTextSize(o.key)}
-                            style={[styles.chip, styles.chipWide, textSize === o.key && styles.chipActive]}
-                          >
-                            <Text style={[styles.chipText, textSize === o.key && styles.chipTextActive]}>
-                              {o.label}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </View>
-            ))}
+                    <Ionicons
+                      name={
+                        (item.action === "reading_speed" || item.action === "text_size")
+                          ? expandedKey === item.action ? "chevron-up" : "chevron-down"
+                          : item.action === "external" || item.action === "rate" || item.action === "feedback"
+                          ? "open-outline"
+                          : "chevron-forward"
+                      }
+                      size={15}
+                      color={Colors.textMuted}
+                    />
+                  </Pressable>
 
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Version {APP_VERSION}</Text>
-              <Text style={styles.footerText}>Powered by Sarvam AI · Google Vision</Text>
+                  {item.action === "reading_speed" && expandedKey === "reading_speed" && (
+                    <View style={styles.inlinePicker}>
+                      {SPEED_OPTIONS_PREF.map((s) => (
+                        <Pressable
+                          key={s}
+                          onPress={() => setDefaultSpeed(s)}
+                          style={[styles.chip, defaultSpeed === s && styles.chipActive]}
+                        >
+                          <Text style={[styles.chipText, defaultSpeed === s && styles.chipTextActive]}>
+                            {s}×
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+
+                  {item.action === "text_size" && expandedKey === "text_size" && (
+                    <View style={styles.inlinePicker}>
+                      {TEXT_SIZE_OPTIONS.map((o) => (
+                        <Pressable
+                          key={o.key}
+                          onPress={() => setTextSize(o.key as TextSizeKey)}
+                          style={[styles.chip, styles.chipWide, textSize === o.key && styles.chipActive]}
+                        >
+                          <Text style={[styles.chipText, textSize === o.key && styles.chipTextActive]}>
+                            {o.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
             </View>
-          </ScrollView>
-        </Animated.View>
-      </View>
+          ))}
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Version {APP_VERSION}</Text>
+            <Text style={styles.footerText}>Powered by Sarvam AI · Google Vision</Text>
+          </View>
+        </ScrollView>
+      </Animated.View>
 
       {/* About modal */}
       <Modal visible={activeModal === "about"} transparent animationType="fade" onRequestClose={() => setActiveModal(null)}>
@@ -268,10 +271,7 @@ export default function DrawerMenu({ visible, onClose, onOpenLanguage }: Props) 
               <Text style={styles.aboutValue}>Visually impaired & low-literacy users in India</Text>
             </View>
 
-            <Pressable
-              style={styles.aboutCloseBtn}
-              onPress={() => setActiveModal(null)}
-            >
+            <Pressable style={styles.aboutCloseBtn} onPress={() => setActiveModal(null)}>
               <Text style={styles.aboutCloseBtnText}>Close</Text>
             </Pressable>
           </View>
@@ -340,20 +340,24 @@ export default function DrawerMenu({ visible, onClose, onOpenLanguage }: Props) 
           </View>
         </View>
       </Modal>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    flexDirection: "row",
+  root: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   drawer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    bottom: 0,
     width: DRAWER_WIDTH,
     backgroundColor: Colors.surface,
     shadowColor: "#000",
