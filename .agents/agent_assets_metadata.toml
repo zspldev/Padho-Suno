@@ -6,6 +6,12 @@ uri = "file://attached_assets/generated_images/padhosuno_splash.png"
 type = "image"
 title = "padhosuno splash screen"
 
+[[generated]]
+id = "fmaZ2cWgOod_9WAL3wupj"
+uri = "file://assets/images/splash-icon.png"
+type = "image"
+title = "padhosuno splash icon"
+
 [[outputs]]
 id = "wFsxm125JEZHu_ragzx9w"
 uri = "file://Padho-Suno.md"
