@@ -193,6 +193,11 @@ function configureExpoAndLanding(app: express.Application) {
       return serveExpoManifest(platform, res);
     }
 
+    if (req.path === "/qr") {
+      const qrPath = path.resolve(process.cwd(), "server", "templates", "qr.html");
+      return res.sendFile(qrPath);
+    }
+
     if (req.path === "/" && !platform) {
       if (hasWebBuild) {
         return res.sendFile(webIndexPath);
